@@ -119,7 +119,6 @@ if st.session_state.role == 'admin':
 # --------------------------
 st.header("🔍 Search and Edit Entries")
 
-# Date search
 search_type = st.radio("Search Type:", ["Exact Date", "Month"])
 if search_type == "Exact Date":
     search_date = st.date_input("Select Date")
@@ -142,22 +141,26 @@ else:
 st.subheader("👷 Worker Entries")
 if workers:
     for w in workers:
-        col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 2, 1])
+        col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 2, 2])
         col1.write(f"ID: {w[0]}")
         col2.write(f"Name: {w[1]}")
         col3.write(f"Salary: ₹{w[2]}")
         col4.write(f"Date: {w[3]}")
         if st.session_state.role == 'admin':
             if col5.button(f"Edit ID {w[0]}"):
-                # Editable modal
-                new_name = st.text_input(f"New Name for ID {w[0]}", w[1])
-                new_salary = st.text_input(f"New Salary for ID {w[0]}", str(w[2]))
-                new_date = st.date_input(f"New Date for ID {w[0]}", date.fromisoformat(w[3]))
+                new_name = st.text_input(f"New Name ID {w[0]}", w[1])
+                new_salary = st.text_input(f"New Salary ID {w[0]}", str(w[2]))
+                new_date = st.date_input(f"New Date ID {w[0]}", date.fromisoformat(w[3]))
                 if st.button(f"Save Changes ID {w[0]}"):
                     c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
                               (new_name, float(new_salary), new_date.isoformat(), w[0]))
                     conn.commit()
                     st.success(f"Updated worker ID {w[0]}")
+            if col5.button(f"Delete ID {w[0]}"):
+                if st.confirm(f"Are you sure you want to delete worker ID {w[0]}?"):
+                    c.execute("DELETE FROM workers WHERE id=?", (w[0],))
+                    conn.commit()
+                    st.success(f"Deleted worker ID {w[0]}")
 else:
     st.warning("No worker entries found")
 
@@ -167,17 +170,22 @@ else:
 st.subheader("📝 Notes / Holidays")
 if notes:
     for n in notes:
-        col1, col2, col3 = st.columns([2, 4, 2])
+        col1, col2, col3, col4 = st.columns([1, 2, 4, 2])
         col1.write(f"ID: {n[0]}")
         col2.write(f"Date: {n[1]}")
         col3.write(f"Note: {n[2]}")
         if st.session_state.role == 'admin':
-            if st.button(f"Edit Note ID {n[0]}"):
+            if col4.button(f"Edit Note ID {n[0]}"):
                 new_note = st.text_area(f"Edit Note ID {n[0]}", n[2])
                 if st.button(f"Save Note ID {n[0]}"):
                     c.execute("UPDATE day_notes SET note=? WHERE id=?", (new_note, n[0]))
                     conn.commit()
                     st.success(f"Updated note ID {n[0]}")
+            if col4.button(f"Delete Note ID {n[0]}"):
+                if st.confirm(f"Are you sure you want to delete note ID {n[0]}?"):
+                    c.execute("DELETE FROM day_notes WHERE id=?", (n[0],))
+                    conn.commit()
+                    st.success(f"Deleted note ID {n[0]}")
 else:
     st.warning("No notes found")
 
@@ -198,5 +206,4 @@ st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
 # Viewer Info
 # --------------------------
 if st.session_state.role == 'viewer':
-    st.info("You have read-only access. You cannot edit or add data.")
-
+    st.info("You have read-only access. You cannot edit or delete data.")
