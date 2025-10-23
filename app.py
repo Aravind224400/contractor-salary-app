@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import os
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 # --------------------------
 # Config
@@ -9,8 +9,8 @@ from datetime import date, timedelta
 st.set_page_config(page_title="🏗 Contractor Salary Tracker",
                    page_icon="🏗", layout="wide")
 
-ADMIN_PASSWORD = "Dada"   # full access
-VIEW_PASSWORD = "work"     # read-only access
+ADMIN_PASSWORD = "dada"
+VIEW_PASSWORD = "work"
 
 # --------------------------
 # Login
@@ -26,11 +26,11 @@ if not st.session_state.logged_in:
         if pwd == ADMIN_PASSWORD:
             st.session_state.logged_in = True
             st.session_state.role = 'admin'
-            st.success("Logged in as Admin (full access)")
+            st.success("Logged in as Admin")
         elif pwd == VIEW_PASSWORD:
             st.session_state.logged_in = True
             st.session_state.role = 'viewer'
-            st.success("Logged in as Viewer (read-only)")
+            st.success("Logged in as Viewer")
         else:
             st.error("Incorrect password")
     st.stop()
@@ -60,7 +60,6 @@ CREATE TABLE IF NOT EXISTS day_notes(
     note TEXT
 )
 ''')
-
 conn.commit()
 
 today_str = date.today().strftime("%Y-%m-%d")
@@ -125,82 +124,68 @@ if st.session_state.role == 'admin':
             st.warning("Enter something before saving.")
 
 # --------------------------
-# Daily Dashboard (Past 30 Days)
+# Search Section
 # --------------------------
-st.header("📋 Daily Work Status (Past 30 Days)")
-today = date.today()
-start_date = today - timedelta(days=30)
+st.header("🔍 Search by Date / Month")
 
-for i in range(31):
-    day = start_date + timedelta(days=i)
-    day_str = day.strftime("%Y-%m-%d")
-    
-    # Workers
-    c.execute("SELECT * FROM workers WHERE entry_date=?", (day_str,))
+search_type = st.radio("Search Type:", ["Exact Date", "Month"])
+if search_type == "Exact Date":
+    search_date = st.date_input("Select Date")
+    search_str = search_date.strftime("%Y-%m-%d")
+    c.execute("SELECT * FROM workers WHERE entry_date=?", (search_str,))
     workers = c.fetchall()
-    
-    # Notes
-    c.execute("SELECT * FROM day_notes WHERE entry_date=?", (day_str,))
+    c.execute("SELECT * FROM day_notes WHERE entry_date=?", (search_str,))
     notes = c.fetchall()
-    
-    st.markdown(f"### Date: {day_str}")
-    
+
+    st.subheader(f"Results for {search_str}")
     if workers:
         for w in workers:
-            try:
-                salary_value = float(w[2])
-            except:
-                salary_value = 0
-            st.success(f"Worker: {w[1]} | Salary: ₹{salary_value}")
+            st.success(f"Worker: {w[1]} | Salary: ₹{w[2]}")
     if notes:
         for n in notes:
             st.info(f"Note: {n[2]}")
-    
     if not workers and not notes:
         st.warning("⚠️ No work recorded")
 
-# --------------------------
-# Monthly Summary
-# --------------------------
-st.header("📅 Monthly Summary")
-month_input = st.date_input("Select Month", value=date.today())
-month_str = month_input.strftime("%Y-%m")
+else:  # Month search
+    month_input = st.date_input("Select Month (any day of month)")
+    month_str = month_input.strftime("%Y-%m")
+    c.execute("SELECT * FROM workers WHERE entry_date LIKE ?", (f"{month_str}%",))
+    workers = c.fetchall()
+    c.execute("SELECT * FROM day_notes WHERE entry_date LIKE ?", (f"{month_str}%",))
+    notes = c.fetchall()
 
-c.execute("SELECT * FROM workers WHERE entry_date LIKE ?", (f"{month_str}%",))
-monthly_workers = c.fetchall()
-
-if monthly_workers:
-    monthly_total = sum([float(w[2]) for w in monthly_workers])
-    st.write(f"Total salary for {month_str}: ₹{monthly_total}")
-else:
-    st.write(f"No entries for {month_str}")
+    st.subheader(f"Results for {month_str}")
+    if workers:
+        for w in workers:
+            st.success(f"Date: {w[3]} | Worker: {w[1]} | Salary: ₹{w[2]}")
+    if notes:
+        for n in notes:
+            st.info(f"Date: {n[1]} | Note: {n[2]}")
+    if not workers and not notes:
+        st.warning("⚠️ No work recorded this month")
 
 # --------------------------
-# Past 1 Year Data
+# Past 1 Year Summary
 # --------------------------
 st.header("📅 Past 1 Year Data")
 c.execute("SELECT * FROM workers WHERE entry_date >= date('now', '-1 year') ORDER BY entry_date DESC")
 year_data = c.fetchall()
 
 total_year = 0
-if len(year_data) == 0:
-    st.info("No entries in the past 1 year.")
-else:
+if year_data:
     for w in year_data:
         try:
             total_year += float(w[2])
         except:
             continue
-        col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
-        col1.write(f"ID: {w[0]}")
-        col2.write(f"Name: {w[1]}")
-        col3.write(f"Salary: ₹{w[2]}")
-        col4.write(f"Date: {w[3]}")
+        st.info(f"Date: {w[3]} | Worker: {w[1]} | Salary: ₹{w[2]}")
     st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
+else:
+    st.info("No entries in the past 1 year.")
 
 # --------------------------
 # Viewer Info
 # --------------------------
 if st.session_state.role == 'viewer':
     st.info("You have read-only access. You cannot add or modify data.")
-
