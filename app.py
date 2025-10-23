@@ -45,9 +45,9 @@ c = conn.cursor()
 c.execute('''
 CREATE TABLE IF NOT EXISTS workers(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    salary REAL,
-    entry_date TEXT
+    name TEXT NOT NULL,
+    salary REAL NOT NULL,
+    entry_date TEXT NOT NULL
 )
 ''')
 conn.commit()
@@ -55,56 +55,54 @@ conn.commit()
 today_str = date.today().strftime("%Y-%m-%d")
 
 # --------------------------
-# Sidebar Controls (Admin Only)
+# Admin Sidebar
 # --------------------------
 if st.session_state.role == 'admin':
     st.sidebar.header("Add / Update Worker")
     name = st.sidebar.text_input("Worker Name")
     salary = st.sidebar.text_input("Daily Salary (₹)")
     worker_id = st.sidebar.text_input("Worker ID (for update only)")
-    today = today_str
 
     col1, col2 = st.sidebar.columns(2)
 
-    # Add worker
+    # Add Worker
     with col1:
         if st.button("Add Worker"):
             if name.strip() != "" and salary.strip() != "":
                 try:
                     salary_value = float(salary)
                     c.execute("INSERT INTO workers (name, salary, entry_date) VALUES (?, ?, ?)",
-                              (name, salary_value, today))
+                              (name.strip(), salary_value, today_str))
                     conn.commit()
-                    st.success(f"Added {name} with salary ₹{salary_value} on {today}")
-                except ValueError:
+                    st.success(f"Added {name} with salary ₹{salary_value} on {today_str}")
+                except:
                     st.error("Enter a valid number for salary")
             else:
-                st.error("Please enter name and salary")
+                st.error("Enter name and salary")
 
-    # Update worker
+    # Update Worker
     with col2:
         if st.button("Update Worker"):
             if worker_id.strip().isdigit() and (name.strip() != "" or salary.strip() != ""):
                 try:
-                    # Fetch existing data
                     c.execute("SELECT name, salary FROM workers WHERE id=?", (int(worker_id),))
                     row = c.fetchone()
                     if row:
                         new_name = name.strip() if name.strip() != "" else row[0]
                         new_salary = float(salary) if salary.strip() != "" else row[1]
                         c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
-                                  (new_name, new_salary, today, int(worker_id)))
+                                  (new_name, new_salary, today_str, int(worker_id)))
                         conn.commit()
                         st.success(f"Updated worker ID {worker_id}")
                     else:
                         st.error("Worker ID not found")
-                except ValueError:
-                    st.error("Enter a valid salary")
+                except:
+                    st.error("Invalid data for update")
             else:
-                st.error("Provide Worker ID and at least a new name or salary")
+                st.error("Provide Worker ID and at least name or salary")
 
 # --------------------------
-# Daily Dashboard
+# Today's Workers
 # --------------------------
 st.header("📋 Today's Workers")
 c.execute("SELECT * FROM workers WHERE entry_date=?", (today_str,))
@@ -115,11 +113,14 @@ if len(todays_workers) == 0:
     st.info("No workers added today yet.")
 else:
     for w in todays_workers:
-        total_today += w[2]
-        col1, col2, col3 = st.columns([1, 3, 2])
-        col1.write(f"**ID:** {w[0]}")
-        col2.write(f"**Name:** {w[1]}")
-        col3.write(f"**Salary:** ₹{w[2]}")
+        try:
+            total_today += float(w[2])
+            col1, col2, col3 = st.columns([1, 3, 2])
+            col1.write(f"ID: {w[0]}")
+            col2.write(f"Name: {w[1]}")
+            col3.write(f"Salary: ₹{w[2]}")
+        except:
+            continue
     st.markdown(f"### 💰 Total Salary Today: ₹{total_today}")
 
 # --------------------------
@@ -133,7 +134,7 @@ c.execute("SELECT * FROM workers WHERE entry_date LIKE ?", (f"{month_str}%",))
 monthly_workers = c.fetchall()
 
 if monthly_workers:
-    monthly_total = sum([w[2] for w in monthly_workers])
+    monthly_total = sum([float(w[2]) for w in monthly_workers])
     st.write(f"Total salary for {month_str}: ₹{monthly_total}")
 else:
     st.write(f"No entries for {month_str}")
@@ -150,16 +151,19 @@ if len(year_data) == 0:
     st.info("No entries in the past 1 year.")
 else:
     for w in year_data:
-        total_year += w[2]
-        col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
-        col1.write(f"ID: {w[0]}")
-        col2.write(f"Name: {w[1]}")
-        col3.write(f"Salary: ₹{w[2]}")
-        col4.write(f"Date: {w[3]}")
+        try:
+            total_year += float(w[2])
+            col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
+            col1.write(f"ID: {w[0]}")
+            col2.write(f"Name: {w[1]}")
+            col3.write(f"Salary: ₹{w[2]}")
+            col4.write(f"Date: {w[3]}")
+        except:
+            continue
     st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
 
 # --------------------------
-# Info for Viewer
+# Viewer Info
 # --------------------------
 if st.session_state.role == 'viewer':
     st.info("You have read-only access. You cannot add or modify data.")
