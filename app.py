@@ -9,8 +9,8 @@ from datetime import date, timedelta
 st.set_page_config(page_title="🏗 Contractor Salary Tracker",
                    page_icon="🏗", layout="wide")
 
-ADMIN_PASSWORD = "DadSecret123"
-VIEW_PASSWORD = "ViewOnly123"
+ADMIN_PASSWORD = "dada"
+VIEW_PASSWORD = "work"
 
 # --------------------------
 # Login
@@ -199,3 +199,4 @@ st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
 # --------------------------
 if st.session_state.role == 'viewer':
     st.info("You have read-only access. You cannot edit or add data.")
+
