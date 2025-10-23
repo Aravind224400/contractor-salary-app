@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import os
-from datetime import date, timedelta
+from datetime import date
 
 # --------------------------
 # Config
@@ -141,13 +141,16 @@ else:
 st.subheader("👷 Worker Entries")
 if workers:
     for w in workers:
-        col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 2, 2])
+        col1, col2, col3, col4, col5, col6 = st.columns([1, 3, 2, 2, 2, 2])
         col1.write(f"ID: {w[0]}")
         col2.write(f"Name: {w[1]}")
         col3.write(f"Salary: ₹{w[2]}")
         col4.write(f"Date: {w[3]}")
+        
         if st.session_state.role == 'admin':
-            if col5.button(f"Edit ID {w[0]}"):
+            # Edit
+            edit_key = f"edit_worker_{w[0]}"
+            if col5.button("Edit", key=edit_key):
                 new_name = st.text_input(f"New Name ID {w[0]}", w[1])
                 new_salary = st.text_input(f"New Salary ID {w[0]}", str(w[2]))
                 new_date = st.date_input(f"New Date ID {w[0]}", date.fromisoformat(w[3]))
@@ -156,11 +159,18 @@ if workers:
                               (new_name, float(new_salary), new_date.isoformat(), w[0]))
                     conn.commit()
                     st.success(f"Updated worker ID {w[0]}")
-            if col5.button(f"Delete ID {w[0]}"):
-                if st.confirm(f"Are you sure you want to delete worker ID {w[0]}?"):
+
+            # Delete
+            delete_key = f"delete_worker_{w[0]}"
+            confirm_key = f"confirm_worker_{w[0]}"
+            if col6.button("Delete", key=delete_key):
+                st.session_state[confirm_key] = True
+            if st.session_state.get(confirm_key, False):
+                if st.button(f"Confirm Delete ID {w[0]}", key=f"confirm_{w[0]}"):
                     c.execute("DELETE FROM workers WHERE id=?", (w[0],))
                     conn.commit()
                     st.success(f"Deleted worker ID {w[0]}")
+                    st.session_state[confirm_key] = False
 else:
     st.warning("No worker entries found")
 
@@ -170,22 +180,32 @@ else:
 st.subheader("📝 Notes / Holidays")
 if notes:
     for n in notes:
-        col1, col2, col3, col4 = st.columns([1, 2, 4, 2])
+        col1, col2, col3, col4, col5 = st.columns([1, 2, 4, 2, 2])
         col1.write(f"ID: {n[0]}")
         col2.write(f"Date: {n[1]}")
         col3.write(f"Note: {n[2]}")
+        
         if st.session_state.role == 'admin':
-            if col4.button(f"Edit Note ID {n[0]}"):
+            # Edit Note
+            edit_note_key = f"edit_note_{n[0]}"
+            if col4.button("Edit", key=edit_note_key):
                 new_note = st.text_area(f"Edit Note ID {n[0]}", n[2])
-                if st.button(f"Save Note ID {n[0]}"):
+                if st.button(f"Save Note ID {n[0]}", key=f"save_note_{n[0]}"):
                     c.execute("UPDATE day_notes SET note=? WHERE id=?", (new_note, n[0]))
                     conn.commit()
                     st.success(f"Updated note ID {n[0]}")
-            if col4.button(f"Delete Note ID {n[0]}"):
-                if st.confirm(f"Are you sure you want to delete note ID {n[0]}?"):
+
+            # Delete Note
+            delete_note_key = f"delete_note_{n[0]}"
+            confirm_note_key = f"confirm_note_{n[0]}"
+            if col5.button("Delete", key=delete_note_key):
+                st.session_state[confirm_note_key] = True
+            if st.session_state.get(confirm_note_key, False):
+                if st.button(f"Confirm Delete Note ID {n[0]}", key=f"confirm_note_{n[0]}"):
                     c.execute("DELETE FROM day_notes WHERE id=?", (n[0],))
                     conn.commit()
                     st.success(f"Deleted note ID {n[0]}")
+                    st.session_state[confirm_note_key] = False
 else:
     st.warning("No notes found")
 
