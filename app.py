@@ -1,7 +1,7 @@
 import streamlit as st
 import sqlite3
 import os
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 
 # --------------------------
 # Config
@@ -9,8 +9,8 @@ from datetime import date, timedelta, datetime
 st.set_page_config(page_title="🏗 Contractor Salary Tracker",
                    page_icon="🏗", layout="wide")
 
-ADMIN_PASSWORD = "dada"
-VIEW_PASSWORD = "work"
+ADMIN_PASSWORD = "DadSecret123"
+VIEW_PASSWORD = "ViewOnly123"
 
 # --------------------------
 # Login
@@ -42,7 +42,7 @@ DB_PATH = os.path.join(os.getcwd(), "workers.db")
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = conn.cursor()
 
-# Workers table
+# Tables
 c.execute('''
 CREATE TABLE IF NOT EXISTS workers(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,8 +51,6 @@ CREATE TABLE IF NOT EXISTS workers(
     entry_date TEXT NOT NULL
 )
 ''')
-
-# Notes table
 c.execute('''
 CREATE TABLE IF NOT EXISTS day_notes(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,8 +72,6 @@ if st.session_state.role == 'admin':
     worker_id = st.sidebar.text_input("Worker ID (for update only)")
 
     col1, col2 = st.sidebar.columns(2)
-
-    # Add Worker
     with col1:
         if st.button("Add Worker"):
             if name.strip() != "" and salary.strip() != "":
@@ -86,32 +82,27 @@ if st.session_state.role == 'admin':
                     conn.commit()
                     st.success(f"Added {name} with salary ₹{salary_value} on {today_str}")
                 except:
-                    st.error("Enter a valid number for salary")
+                    st.error("Enter valid salary")
             else:
                 st.error("Enter name and salary")
-
-    # Update Worker
     with col2:
         if st.button("Update Worker"):
             if worker_id.strip().isdigit() and (name.strip() != "" or salary.strip() != ""):
-                try:
-                    c.execute("SELECT name, salary FROM workers WHERE id=?", (int(worker_id),))
-                    row = c.fetchone()
-                    if row:
-                        new_name = name.strip() if name.strip() != "" else row[0]
-                        new_salary = float(salary) if salary.strip() != "" else row[1]
-                        c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
-                                  (new_name, new_salary, today_str, int(worker_id)))
-                        conn.commit()
-                        st.success(f"Updated worker ID {worker_id} for today {today_str}")
-                    else:
-                        st.error("Worker ID not found")
-                except:
-                    st.error("Invalid data for update")
+                c.execute("SELECT name, salary FROM workers WHERE id=?", (int(worker_id),))
+                row = c.fetchone()
+                if row:
+                    new_name = name.strip() if name.strip() != "" else row[0]
+                    new_salary = float(salary) if salary.strip() != "" else row[1]
+                    c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
+                              (new_name, new_salary, today_str, int(worker_id)))
+                    conn.commit()
+                    st.success(f"Updated worker ID {worker_id}")
+                else:
+                    st.error("Worker ID not found")
             else:
-                st.error("Provide Worker ID and at least a new name or salary")
+                st.error("Provide Worker ID and new data")
 
-    # Daily Notes / Holiday
+    # Daily notes / holidays
     st.sidebar.header("Daily Notes / Holiday Info")
     daily_note = st.sidebar.text_area("Note for Today", "")
     if st.sidebar.button("Save Note"):
@@ -121,13 +112,14 @@ if st.session_state.role == 'admin':
             conn.commit()
             st.success("Note saved for today!")
         else:
-            st.warning("Enter something before saving.")
+            st.warning("Enter something before saving")
 
 # --------------------------
-# Search Section
+# Search / Edit Section
 # --------------------------
-st.header("🔍 Search by Date / Month")
+st.header("🔍 Search and Edit Entries")
 
+# Date search
 search_type = st.radio("Search Type:", ["Exact Date", "Month"])
 if search_type == "Exact Date":
     search_date = st.date_input("Select Date")
@@ -136,56 +128,74 @@ if search_type == "Exact Date":
     workers = c.fetchall()
     c.execute("SELECT * FROM day_notes WHERE entry_date=?", (search_str,))
     notes = c.fetchall()
-
-    st.subheader(f"Results for {search_str}")
-    if workers:
-        for w in workers:
-            st.success(f"Worker: {w[1]} | Salary: ₹{w[2]}")
-    if notes:
-        for n in notes:
-            st.info(f"Note: {n[2]}")
-    if not workers and not notes:
-        st.warning("⚠️ No work recorded")
-
-else:  # Month search
-    month_input = st.date_input("Select Month (any day of month)")
+else:
+    month_input = st.date_input("Select Month")
     month_str = month_input.strftime("%Y-%m")
     c.execute("SELECT * FROM workers WHERE entry_date LIKE ?", (f"{month_str}%",))
     workers = c.fetchall()
     c.execute("SELECT * FROM day_notes WHERE entry_date LIKE ?", (f"{month_str}%",))
     notes = c.fetchall()
 
-    st.subheader(f"Results for {month_str}")
-    if workers:
-        for w in workers:
-            st.success(f"Date: {w[3]} | Worker: {w[1]} | Salary: ₹{w[2]}")
-    if notes:
-        for n in notes:
-            st.info(f"Date: {n[1]} | Note: {n[2]}")
-    if not workers and not notes:
-        st.warning("⚠️ No work recorded this month")
+# --------------------------
+# Display Worker Entries
+# --------------------------
+st.subheader("👷 Worker Entries")
+if workers:
+    for w in workers:
+        col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 2, 1])
+        col1.write(f"ID: {w[0]}")
+        col2.write(f"Name: {w[1]}")
+        col3.write(f"Salary: ₹{w[2]}")
+        col4.write(f"Date: {w[3]}")
+        if st.session_state.role == 'admin':
+            if col5.button(f"Edit ID {w[0]}"):
+                # Editable modal
+                new_name = st.text_input(f"New Name for ID {w[0]}", w[1])
+                new_salary = st.text_input(f"New Salary for ID {w[0]}", str(w[2]))
+                new_date = st.date_input(f"New Date for ID {w[0]}", date.fromisoformat(w[3]))
+                if st.button(f"Save Changes ID {w[0]}"):
+                    c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
+                              (new_name, float(new_salary), new_date.isoformat(), w[0]))
+                    conn.commit()
+                    st.success(f"Updated worker ID {w[0]}")
+else:
+    st.warning("No worker entries found")
+
+# --------------------------
+# Display Notes
+# --------------------------
+st.subheader("📝 Notes / Holidays")
+if notes:
+    for n in notes:
+        col1, col2, col3 = st.columns([2, 4, 2])
+        col1.write(f"ID: {n[0]}")
+        col2.write(f"Date: {n[1]}")
+        col3.write(f"Note: {n[2]}")
+        if st.session_state.role == 'admin':
+            if st.button(f"Edit Note ID {n[0]}"):
+                new_note = st.text_area(f"Edit Note ID {n[0]}", n[2])
+                if st.button(f"Save Note ID {n[0]}"):
+                    c.execute("UPDATE day_notes SET note=? WHERE id=?", (new_note, n[0]))
+                    conn.commit()
+                    st.success(f"Updated note ID {n[0]}")
+else:
+    st.warning("No notes found")
 
 # --------------------------
 # Past 1 Year Summary
 # --------------------------
-st.header("📅 Past 1 Year Data")
-c.execute("SELECT * FROM workers WHERE entry_date >= date('now', '-1 year') ORDER BY entry_date DESC")
+st.header("📅 Past 1 Year Worker Data")
+c.execute("SELECT * FROM workers WHERE entry_date >= date('now','-1 year') ORDER BY entry_date DESC")
 year_data = c.fetchall()
+total_year = sum([float(w[2]) for w in year_data]) if year_data else 0
 
-total_year = 0
 if year_data:
     for w in year_data:
-        try:
-            total_year += float(w[2])
-        except:
-            continue
         st.info(f"Date: {w[3]} | Worker: {w[1]} | Salary: ₹{w[2]}")
-    st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
-else:
-    st.info("No entries in the past 1 year.")
+st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
 
 # --------------------------
 # Viewer Info
 # --------------------------
 if st.session_state.role == 'viewer':
-    st.info("You have read-only access. You cannot add or modify data.")
+    st.info("You have read-only access. You cannot edit or add data.")
