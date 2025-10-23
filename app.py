@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS workers(
 ''')
 conn.commit()
 
+today_str = date.today().strftime("%Y-%m-%d")
+
 # --------------------------
 # Sidebar Controls
 # --------------------------
@@ -52,7 +54,7 @@ st.sidebar.header("Add / Update / Delete Worker")
 name = st.sidebar.text_input("Worker Name")
 salary = st.sidebar.text_input("Daily Salary (₹)")
 worker_id = st.sidebar.text_input("Worker ID (for update/delete)")
-today = date.today().strftime("%Y-%m-%d")
+today = today_str
 
 col1, col2, col3 = st.sidebar.columns(3)
 
@@ -80,4 +82,73 @@ with col2:
                 c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
                           (name, salary_value, today, int(worker_id)))
                 conn.commit()
-                st.success(f"Updated wor
+                st.success(f"Updated worker ID {worker_id}")
+            except ValueError:
+                st.error("Enter valid details")
+        else:
+            st.error("Provide valid ID, name, and salary")
+
+# Delete worker
+with col3:
+    if st.button("Delete Worker"):
+        if worker_id.strip().isdigit():
+            c.execute("DELETE FROM workers WHERE id=?", (int(worker_id),))
+            conn.commit()
+            st.success(f"Deleted worker ID {worker_id}")
+        else:
+            st.error("Enter a valid Worker ID")
+
+# --------------------------
+# Today's Workers
+# --------------------------
+st.header("📋 Today's Workers")
+c.execute("SELECT * FROM workers WHERE entry_date=?", (today_str,))
+todays_workers = c.fetchall()
+
+total_today = 0
+if len(todays_workers) == 0:
+    st.info("No workers added today yet.")
+else:
+    for w in todays_workers:
+        total_today += w[2]
+        col1, col2, col3 = st.columns([1, 3, 2])
+        col1.write(f"**ID:** {w[0]}")
+        col2.write(f"**Name:** {w[1]}")
+        col3.write(f"**Salary:** ₹{w[2]}")
+    st.markdown(f"### 💰 Total Salary Today: ₹{total_today}")
+
+# --------------------------
+# Monthly Summary
+# --------------------------
+st.header("📅 Monthly Summary")
+month_input = st.date_input("Select Month", value=date.today())
+month_str = month_input.strftime("%Y-%m")
+
+c.execute("SELECT * FROM workers WHERE entry_date LIKE ?", (f"{month_str}%",))
+monthly_workers = c.fetchall()
+
+if monthly_workers:
+    monthly_total = sum([w[2] for w in monthly_workers])
+    st.write(f"Total salary for {month_str}: ₹{monthly_total}")
+else:
+    st.write(f"No entries for {month_str}")
+
+# --------------------------
+# Past 1 Year Data
+# --------------------------
+st.header("📅 Past 1 Year Data")
+c.execute("SELECT * FROM workers WHERE entry_date >= date('now', '-1 year') ORDER BY entry_date DESC")
+year_data = c.fetchall()
+
+total_year = 0
+if len(year_data) == 0:
+    st.info("No entries in the past 1 year.")
+else:
+    for w in year_data:
+        total_year += w[2]
+        col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
+        col1.write(f"ID: {w[0]}")
+        col2.write(f"Name: {w[1]}")
+        col3.write(f"Salary: ₹{w[2]}")
+        col4.write(f"Date: {w[3]}")
+    st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
