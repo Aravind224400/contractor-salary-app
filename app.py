@@ -1,189 +1,196 @@
 import streamlit as st
 import sqlite3
-import os
-from datetime import date, datetime
+from datetime import date
 
-# --------------------------
-# Config
-# --------------------------
-st.set_page_config(page_title="🏗 Contractor Salary Tracker",
-                   page_icon="🏗", layout="wide")
+# ========================
+# Database Setup
+# ========================
+conn = sqlite3.connect("contractor.db", check_same_thread=False)
+c = conn.cursor()
 
-# --------------------------
-# Passwords
-# --------------------------
+# Workers table
+c.execute("""
+CREATE TABLE IF NOT EXISTS workers_master (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE,
+    role TEXT,
+    contact TEXT
+)
+""")
+
+# Daily entries table
+c.execute("""
+CREATE TABLE IF NOT EXISTS work_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_id INTEGER,
+    salary REAL,
+    entry_date TEXT,
+    note TEXT,
+    FOREIGN KEY(worker_id) REFERENCES workers_master(id)
+)
+""")
+
+conn.commit()
+
+# ========================
+# Page Setup
+# ========================
+st.set_page_config(page_title="Contractor Salary Tracker", page_icon="🧱", layout="wide")
+st.markdown("<h1 style='text-align:center;color:#0d47a1;'>🧱 Contractor Salary Tracker</h1>", unsafe_allow_html=True)
+
+# ========================
+# Hardcoded Login
+# ========================
 ADMIN_PASSWORD = "dada"
 VIEW_PASSWORD = "work"
 
-# --------------------------
-# Session State for Login
-# --------------------------
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.role = None
+st.sidebar.header("🔐 Login / Role Selection")
+role = st.sidebar.radio("Select Role:", ["Viewer", "Admin"])
 
-# --------------------------
-# Login
-# --------------------------
-if not st.session_state.logged_in:
-    st.title("🔒 Login")
-    pwd = st.text_input("Enter password:", type="password")
-    if st.button("Login"):
-        if pwd == ADMIN_PASSWORD:
-            st.session_state.logged_in = True
-            st.session_state.role = 'admin'
-            st.success("Logged in as Admin")
-        elif pwd == VIEW_PASSWORD:
-            st.session_state.logged_in = True
-            st.session_state.role = 'viewer'
-            st.success("Logged in as Viewer")
-        else:
-            st.error("Incorrect password")
-    st.stop()
+entered_pass = st.sidebar.text_input("Enter Password", type="password")
+if st.sidebar.button("Login"):
+    if role == "Admin" and entered_pass == ADMIN_PASSWORD:
+        st.session_state.admin_logged = True
+        st.sidebar.success("✅ Logged in as Admin")
+    elif role == "Viewer" and entered_pass == VIEW_PASSWORD:
+        st.session_state.admin_logged = False
+        st.sidebar.info("Logged in as Viewer")
+    else:
+        st.session_state.admin_logged = False
+        st.sidebar.error("❌ Incorrect password")
+        st.stop()
 
-# --------------------------
-# Database Setup
-# --------------------------
-DB_PATH = os.path.join(os.getcwd(), "workers.db")
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-c = conn.cursor()
+if 'admin_logged' not in st.session_state:
+    st.session_state.admin_logged = False
 
-# Tables
-c.execute('''
-CREATE TABLE IF NOT EXISTS workers(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    salary REAL NOT NULL,
-    entry_date TEXT NOT NULL
-)
-''')
+# ========================
+# Tabs
+# ========================
+tab1, tab2, tab3, tab4 = st.tabs(["👷 Register Worker", "💰 Daily Entry", "📅 View Records", "📝 Notes & Holidays"])
 
-c.execute('''
-CREATE TABLE IF NOT EXISTS day_notes(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    entry_date TEXT NOT NULL,
-    note TEXT
-)
-''')
-conn.commit()
+# ========================
+# 1️⃣ Register Worker
+# ========================
+with tab1:
+    st.header("👷 Register New Worker")
+    if st.session_state.admin_logged:
+        with st.form("add_worker_form"):
+            name = st.text_input("Worker Name")
+            role_input = st.text_input("Role (e.g. Mason, Painter, Labourer)")
+            contact = st.text_input("Contact Number")
+            submit_worker = st.form_submit_button("Add Worker")
 
-today_str = date.today().strftime("%Y-%m-%d")
-
-# --------------------------
-# Admin Sidebar
-# --------------------------
-if st.session_state.role == 'admin':
-    st.sidebar.header("Add / Update Worker")
-    name = st.sidebar.text_input("Worker Name")
-    salary = st.sidebar.text_input("Daily Salary (₹)")
-    worker_id = st.sidebar.text_input("Worker ID (for update only)")
-
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("Add Worker"):
-            if name.strip() != "" and salary.strip() != "":
-                try:
-                    salary_value = float(salary)
-                    c.execute("INSERT INTO workers (name, salary, entry_date) VALUES (?, ?, ?)",
-                              (name.strip(), salary_value, today_str))
-                    conn.commit()
-                    st.success(f"Added {name} with salary ₹{salary_value} on {today_str}")
-                except:
-                    st.error("Enter valid salary")
-            else:
-                st.error("Enter name and salary")
-    with col2:
-        if st.button("Update Worker"):
-            if worker_id.strip().isdigit() and (name.strip() != "" or salary.strip() != ""):
-                c.execute("SELECT name, salary FROM workers WHERE id=?", (int(worker_id),))
-                row = c.fetchone()
-                if row:
-                    new_name = name.strip() if name.strip() != "" else row[0]
-                    new_salary = float(salary) if salary.strip() != "" else row[1]
-                    c.execute("UPDATE workers SET name=?, salary=?, entry_date=? WHERE id=?",
-                              (new_name, new_salary, today_str, int(worker_id)))
-                    conn.commit()
-                    st.success(f"Updated worker ID {worker_id}")
+            if submit_worker:
+                if not name.strip():
+                    st.error("Worker name cannot be empty.")
                 else:
-                    st.error("Worker ID not found")
-            else:
-                st.error("Provide Worker ID and new data")
+                    try:
+                        c.execute("INSERT INTO workers_master (name, role, contact) VALUES (?, ?, ?)",
+                                  (name.strip(), role_input.strip(), contact.strip()))
+                        conn.commit()
+                        st.success(f"✅ Worker '{name}' added successfully")
+                    except sqlite3.IntegrityError:
+                        st.warning("⚠️ Worker already exists!")
+    else:
+        st.info("Viewer mode: cannot register workers.")
 
-    # Daily notes / holidays
-    st.sidebar.header("Daily Notes / Holiday Info")
-    daily_note = st.sidebar.text_area("Note for Today", "")
-    if st.sidebar.button("Save Note"):
-        if daily_note.strip() != "":
-            c.execute("INSERT INTO day_notes (entry_date, note) VALUES (?, ?)",
-                      (today_str, daily_note.strip()))
-            conn.commit()
-            st.success("Note saved for today!")
-        else:
-            st.warning("Enter something before saving")
-
-# --------------------------
-# Search / Display Section
-# --------------------------
-st.header("🔍 Search and View Entries")
-search_type = st.radio("Search Type:", ["Exact Date", "Month"])
-if search_type == "Exact Date":
-    search_date = st.date_input("Select Date", date.today())
-    search_str = search_date.strftime("%Y-%m-%d")
-    c.execute("SELECT * FROM workers WHERE entry_date=?", (search_str,))
-    workers = c.fetchall()
-    c.execute("SELECT * FROM day_notes WHERE entry_date=?", (search_str,))
-    notes = c.fetchall()
-else:
-    month_input = st.date_input("Select Month", date.today())
-    month_str = month_input.strftime("%Y-%m")
-    c.execute("SELECT * FROM workers WHERE entry_date LIKE ?", (f"{month_str}%",))
-    workers = c.fetchall()
-    c.execute("SELECT * FROM day_notes WHERE entry_date LIKE ?", (f"{month_str}%",))
-    notes = c.fetchall()
-
-# --------------------------
-# Display Worker Entries
-# --------------------------
-st.subheader("👷 Worker Entries")
-if workers:
+    st.subheader("Registered Workers")
+    workers = c.execute("SELECT * FROM workers_master ORDER BY name").fetchall()
     for w in workers:
-        col1, col2, col3, col4 = st.columns([1, 3, 2, 2])
-        col1.write(f"ID: {w[0]}")
-        col2.write(f"Name: {w[1]}")
-        col3.write(f"Salary: ₹{w[2]}")
-        col4.write(f"Date: {w[3]}")
-else:
-    st.info("No worker entries found.")
+        col1, col2, col3, col4 = st.columns([2,2,2,1])
+        col1.write(f"**{w[1]}**")
+        col2.write(w[2] or "")
+        col3.write(w[3] or "")
+        if st.session_state.admin_logged:
+            if col4.button("❌ Delete", key=f"del_worker_{w[0]}"):
+                c.execute("DELETE FROM workers_master WHERE id=?", (w[0],))
+                conn.commit()
+                st.warning(f"Deleted worker '{w[1]}'")
+                st.experimental_rerun()
 
-# --------------------------
-# Display Notes
-# --------------------------
-st.subheader("📝 Notes / Holidays")
-if notes:
-    for n in notes:
-        st.write(f"Date: {n[1]} | Note: {n[2]}")
-else:
-    st.info("No notes found.")
+# ========================
+# 2️⃣ Daily Entry
+# ========================
+with tab2:
+    st.header("💰 Daily Salary Entry")
+    entry_date = st.date_input("Select Date", date.today())
+    
+    # Worker selection
+    worker_list = c.execute("SELECT id, name FROM workers_master ORDER BY name").fetchall()
+    worker_dict = {w[1]: w[0] for w in worker_list}
+    worker_choice = st.selectbox("Select Worker", ["-- Select Worker --"] + list(worker_dict.keys()))
 
-# --------------------------
-# Past 1 Year Summary
-# --------------------------
-st.header("📅 Past 1 Year Worker Data")
-one_year_ago = (date.today().replace(year=date.today().year-1)).strftime("%Y-%m-%d")
-c.execute("SELECT * FROM workers WHERE entry_date >= ? ORDER BY entry_date DESC", (one_year_ago,))
-year_data = c.fetchall()
-if year_data:
-    total_year = sum([float(w[2]) for w in year_data])
-    for w in year_data:
-        st.info(f"Date: {w[3]} | Worker: {w[1]} | Salary: ₹{w[2]}")
-    st.markdown(f"### 💰 Total Salary Past 1 Year: ₹{total_year}")
-else:
-    st.info("No data for past 1 year.")
+    salary = st.number_input("Enter Salary (₹)", min_value=0.0, step=100.0)
+    note = st.text_input("Work / Note (optional)")
 
-# --------------------------
-# Viewer Info
-# --------------------------
-if st.session_state.role == 'viewer':
-    st.info("You have read-only access. You cannot edit or delete data.")
+    if st.session_state.admin_logged:
+        if st.button("Add Daily Entry"):
+            if worker_choice == "-- Select Worker --":
+                st.error("Please select a worker")
+            elif salary <= 0:
+                st.error("Enter a valid salary")
+            else:
+                c.execute("INSERT INTO work_entries (worker_id, salary, entry_date, note) VALUES (?, ?, ?, ?)",
+                          (worker_dict[worker_choice], salary, entry_date.strftime("%Y-%m-%d"), note))
+                conn.commit()
+                st.success(f"💰 Added salary for {worker_choice} on {entry_date}")
+    else:
+        st.info("Viewer mode: cannot add daily entries.")
+
+# ========================
+# 3️⃣ View Records
+# ========================
+with tab3:
+    st.header("📅 View Records")
+    view_date = st.date_input("Select Date", date.today(), key="view_date")
+    view_str = view_date.strftime("%Y-%m-%d")
+
+    c.execute("""
+        SELECT we.id, wm.name, wm.role, we.salary, we.note
+        FROM work_entries we
+        JOIN workers_master wm ON we.worker_id = wm.id
+        WHERE we.entry_date=?
+        ORDER BY wm.name
+    """, (view_str,))
+    records = c.fetchall()
+
+    if records:
+        total_salary = sum([r[3] for r in records])
+        st.success(f"Total Salary on {view_str}: ₹{total_salary}")
+        for r in records:
+            col1, col2, col3, col4, col5 = st.columns([2,2,2,2,1])
+            col1.write(f"👷 {r[1]}")
+            col2.write(r[2])
+            col3.write(f"₹{r[3]}")
+            col4.write(r[4] or "")
+            if st.session_state.admin_logged:
+                if col5.button("🗑️ Delete", key=f"del_entry_{r[0]}"):
+                    c.execute("DELETE FROM work_entries WHERE id=?", (r[0],))
+                    conn.commit()
+                    st.warning(f"Deleted entry for {r[1]}")
+                    st.experimental_rerun()
+    else:
+        st.info("No entries for this date. (No Work)")
+
+# ========================
+# 4️⃣ Notes / Holidays
+# ========================
+with tab4:
+    st.header("📝 Notes / Holidays")
+    note_date = st.date_input("Select Date", date.today(), key="note_date")
+    existing_note = c.execute("SELECT note FROM work_entries WHERE entry_date=? LIMIT 1", (note_date.strftime("%Y-%m-%d"),)).fetchone()
+    note_text = st.text_area("Add Note / Holiday Info", existing_note[0] if existing_note else "")
+
+    if st.session_state.admin_logged:
+        if st.button("Save Note"):
+            if existing_note:
+                c.execute("UPDATE work_entries SET note=? WHERE entry_date=?", (note_text, note_date.strftime("%Y-%m-%d")))
+            else:
+                c.execute("INSERT INTO work_entries (worker_id, salary, entry_date, note) VALUES (?, ?, ?, ?)",
+                          (0, 0, note_date.strftime("%Y-%m-%d"), note_text))
+            conn.commit()
+            st.success("Note saved successfully!")
+    else:
+        st.info("Viewer mode: cannot save notes.")
 
 conn.close()
