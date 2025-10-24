@@ -75,14 +75,19 @@ if not st.session_state.logged_in:
 # ========================
 # Tabs
 # ========================
-tab1, tab2, tab3, tab4 = st.tabs(["👷 Register Worker", "💰 Daily Entry", "📅 View Records", "📝 Notes & Holidays"])
+if st.session_state.admin_logged:
+    # Admin sees all tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["👷 Register Worker", "💰 Daily Entry", "📅 View Records", "📝 Notes & Holidays"])
+else:
+    # Viewer sees only "View Records"
+    tab3, = st.tabs(["📅 View Records"])
 
 # ========================
-# 1️⃣ Register Worker
+# 1️⃣ Register Worker (Admin Only)
 # ========================
-with tab1:
-    st.header("👷 Register New Worker")
-    if st.session_state.admin_logged:
+if st.session_state.admin_logged:
+    with tab1:
+        st.header("👷 Register New Worker")
         with st.form("add_worker_form"):
             name = st.text_input("Worker Name")
             role_input = st.text_input("Role (e.g. Mason, Painter, Labourer)")
@@ -100,39 +105,36 @@ with tab1:
                         st.success(f"✅ Worker '{name}' added successfully")
                     except sqlite3.IntegrityError:
                         st.warning("⚠️ Worker already exists!")
-    else:
-        st.info("Viewer mode: cannot register workers.")
 
-    st.subheader("Registered Workers")
-    workers = c.execute("SELECT * FROM workers_master ORDER BY name").fetchall()
-    for w in workers:
-        col1, col2, col3, col4 = st.columns([2,2,2,1])
-        col1.write(f"**{w[1]}**")
-        col2.write(w[2] or "")
-        col3.write(w[3] or "")
-        if st.session_state.admin_logged:
-            if col4.button("❌ Delete", key=f"del_worker_{w[0]}"):
-                c.execute("DELETE FROM workers_master WHERE id=?", (w[0],))
-                conn.commit()
-                st.warning(f"Deleted worker '{w[1]}'")
-                st.experimental_rerun()
+        st.subheader("Registered Workers")
+        workers = c.execute("SELECT * FROM workers_master ORDER BY name").fetchall()
+        for w in workers:
+            col1, col2, col3, col4 = st.columns([2,2,2,1])
+            col1.write(f"**{w[1]}**")
+            col2.write(w[2] or "")
+            col3.write(w[3] or "")
+            if st.session_state.admin_logged:
+                if col4.button("❌ Delete", key=f"del_worker_{w[0]}"):
+                    c.execute("DELETE FROM workers_master WHERE id=?", (w[0],))
+                    conn.commit()
+                    st.warning(f"Deleted worker '{w[1]}'")
+                    st.experimental_rerun()
 
 # ========================
-# 2️⃣ Daily Entry
+# 2️⃣ Daily Entry (Admin Only)
 # ========================
-with tab2:
-    st.header("💰 Daily Salary Entry")
-    entry_date = st.date_input("Select Date", date.today())
-    
-    # Worker selection
-    worker_list = c.execute("SELECT id, name FROM workers_master ORDER BY name").fetchall()
-    worker_dict = {w[1]: w[0] for w in worker_list}
-    worker_choice = st.selectbox("Select Worker", ["-- Select Worker --"] + list(worker_dict.keys()))
+if st.session_state.admin_logged:
+    with tab2:
+        st.header("💰 Daily Salary Entry")
+        entry_date = st.date_input("Select Date", date.today())
+        
+        worker_list = c.execute("SELECT id, name FROM workers_master ORDER BY name").fetchall()
+        worker_dict = {w[1]: w[0] for w in worker_list}
+        worker_choice = st.selectbox("Select Worker", ["-- Select Worker --"] + list(worker_dict.keys()))
 
-    salary = st.number_input("Enter Salary (₹)", min_value=0.0, step=100.0)
-    note = st.text_input("Work / Note (optional)")
+        salary = st.number_input("Enter Salary (₹)", min_value=0.0, step=100.0)
+        note = st.text_input("Work / Note (optional)")
 
-    if st.session_state.admin_logged:
         if st.button("Add Daily Entry"):
             if worker_choice == "-- Select Worker --":
                 st.error("Please select a worker")
@@ -143,11 +145,9 @@ with tab2:
                           (worker_dict[worker_choice], salary, entry_date.strftime("%Y-%m-%d"), note))
                 conn.commit()
                 st.success(f"💰 Added salary for {worker_choice} on {entry_date}")
-    else:
-        st.info("Viewer mode: cannot add daily entries.")
 
 # ========================
-# 3️⃣ View Records
+# 3️⃣ View Records (All Users)
 # ========================
 with tab3:
     st.header("📅 View Records")
@@ -182,15 +182,15 @@ with tab3:
         st.info("No entries for this date. (No Work)")
 
 # ========================
-# 4️⃣ Notes / Holidays
+# 4️⃣ Notes / Holidays (Admin Only)
 # ========================
-with tab4:
-    st.header("📝 Notes / Holidays")
-    note_date = st.date_input("Select Date", date.today(), key="note_date")
-    existing_note = c.execute("SELECT note FROM work_entries WHERE entry_date=? LIMIT 1", (note_date.strftime("%Y-%m-%d"),)).fetchone()
-    note_text = st.text_area("Add Note / Holiday Info", existing_note[0] if existing_note else "")
+if st.session_state.admin_logged:
+    with tab4:
+        st.header("📝 Notes / Holidays")
+        note_date = st.date_input("Select Date", date.today(), key="note_date")
+        existing_note = c.execute("SELECT note FROM work_entries WHERE entry_date=? LIMIT 1", (note_date.strftime("%Y-%m-%d"),)).fetchone()
+        note_text = st.text_area("Add Note / Holiday Info", existing_note[0] if existing_note else "")
 
-    if st.session_state.admin_logged:
         if st.button("Save Note"):
             if existing_note:
                 c.execute("UPDATE work_entries SET note=? WHERE entry_date=?", (note_text, note_date.strftime("%Y-%m-%d")))
@@ -199,7 +199,5 @@ with tab4:
                           (0, 0, note_date.strftime("%Y-%m-%d"), note_text))
             conn.commit()
             st.success("Note saved successfully!")
-    else:
-        st.info("Viewer mode: cannot save notes.")
 
 conn.close()
