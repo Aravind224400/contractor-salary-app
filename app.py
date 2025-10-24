@@ -44,24 +44,33 @@ st.markdown("<h1 style='text-align:center;color:#0d47a1;'>🧱 Contractor Salary
 ADMIN_PASSWORD = "dada"
 VIEW_PASSWORD = "work"
 
-st.sidebar.header("🔐 Login / Role Selection")
-role = st.sidebar.radio("Select Role:", ["Viewer", "Admin"])
-
+st.sidebar.header("🔐 Login")
+role = st.sidebar.radio("Select Role:", ["Admin", "Viewer"])
 entered_pass = st.sidebar.text_input("Enter Password", type="password")
+
+# Initialize session state
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.admin_logged = False
+
+# Login check
 if st.sidebar.button("Login"):
     if role == "Admin" and entered_pass == ADMIN_PASSWORD:
+        st.session_state.logged_in = True
         st.session_state.admin_logged = True
         st.sidebar.success("✅ Logged in as Admin")
     elif role == "Viewer" and entered_pass == VIEW_PASSWORD:
+        st.session_state.logged_in = True
         st.session_state.admin_logged = False
         st.sidebar.info("Logged in as Viewer")
     else:
+        st.session_state.logged_in = False
         st.session_state.admin_logged = False
         st.sidebar.error("❌ Incorrect password")
-        st.stop()
 
-if 'admin_logged' not in st.session_state:
-    st.session_state.admin_logged = False
+# Stop the app from loading any content until login
+if not st.session_state.logged_in:
+    st.stop()
 
 # ========================
 # Tabs
