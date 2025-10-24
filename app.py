@@ -8,7 +8,7 @@ from datetime import date
 conn = sqlite3.connect("contractor.db", check_same_thread=False)
 c = conn.cursor()
 
-# Worker master table
+# Workers table
 c.execute("""
 CREATE TABLE IF NOT EXISTS workers_master (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS workers_master (
 )
 """)
 
-# Daily work entries
+# Daily entries table
 c.execute("""
 CREATE TABLE IF NOT EXISTS work_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS work_entries (
 )
 """)
 
-# Admin password storage
+# Admin password table
 c.execute("""
 CREATE TABLE IF NOT EXISTS admin_pass (
     id INTEGER PRIMARY KEY,
@@ -92,23 +92,26 @@ tab1, tab2, tab3, tab4 = st.tabs(["👷 Register Worker", "💰 Daily Entry", "�
 # ========================
 with tab1:
     st.header("👷 Register New Worker")
-    with st.form("add_worker_form"):
-        name = st.text_input("Worker Name")
-        role_input = st.text_input("Role (e.g. Mason, Painter, Labourer)")
-        contact = st.text_input("Contact Number")
-        submit_worker = st.form_submit_button("Add Worker")
+    if st.session_state.admin_logged:
+        with st.form("add_worker_form"):
+            name = st.text_input("Worker Name")
+            role_input = st.text_input("Role (e.g. Mason, Painter, Labourer)")
+            contact = st.text_input("Contact Number")
+            submit_worker = st.form_submit_button("Add Worker")
 
-        if submit_worker:
-            if not name.strip():
-                st.error("Worker name cannot be empty.")
-            else:
-                try:
-                    c.execute("INSERT INTO workers_master (name, role, contact) VALUES (?, ?, ?)",
-                              (name.strip(), role_input.strip(), contact.strip()))
-                    conn.commit()
-                    st.success(f"✅ Worker '{name}' added successfully")
-                except sqlite3.IntegrityError:
-                    st.warning("⚠️ Worker already exists!")
+            if submit_worker:
+                if not name.strip():
+                    st.error("Worker name cannot be empty.")
+                else:
+                    try:
+                        c.execute("INSERT INTO workers_master (name, role, contact) VALUES (?, ?, ?)",
+                                  (name.strip(), role_input.strip(), contact.strip()))
+                        conn.commit()
+                        st.success(f"✅ Worker '{name}' added successfully")
+                    except sqlite3.IntegrityError:
+                        st.warning("⚠️ Worker already exists!")
+    else:
+        st.info("Viewer mode: cannot register workers.")
 
     st.subheader("Registered Workers")
     workers = c.execute("SELECT * FROM workers_master ORDER BY name").fetchall()
@@ -150,6 +153,8 @@ with tab2:
                           (worker_dict[worker_choice], salary, entry_date.strftime("%Y-%m-%d"), note))
                 conn.commit()
                 st.success(f"💰 Added salary for {worker_choice} on {entry_date}")
+    else:
+        st.info("Viewer mode: cannot add daily entries.")
 
 # ========================
 # 3️⃣ View Records
@@ -204,5 +209,7 @@ with tab4:
                           (0, 0, note_date.strftime("%Y-%m-%d"), note_text))
             conn.commit()
             st.success("Note saved successfully!")
+    else:
+        st.info("Viewer mode: cannot save notes.")
 
 conn.close()
