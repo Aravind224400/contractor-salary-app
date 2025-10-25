@@ -121,7 +121,7 @@ if st.session_state.logged_in:
 
             if submitted and name and name != "--- Add New Worker ---":
                 data = {"date": str(work_date), "worker_name": name, "salary": salary, "notes": note}
-                supabase.table("salaries").insert(data).execute()
+                supabase.table("workers").insert(data).execute()
                 st.success(f"✅ Record for **{name}** saved permanently!")
                 st.cache_data.clear() 
                 st.experimental_rerun()
@@ -321,3 +321,4 @@ def show_records(df, mode):
     st.download_button("💾 Download Filtered CSV", filtered_df.to_csv(index=False), "filtered_salaries.csv")
     st.download_button("💾 Download Summary CSV", summary.to_csv(index=False), "salary_summary.csv")
     
+
