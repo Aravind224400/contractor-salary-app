@@ -1,4 +1,4 @@
-Import streamlit as st
+import streamlit as st
 from datetime import date
 from supabase import create_client, Client
 import pandas as pd
@@ -292,3 +292,4 @@ def show_records(df, mode):
     st.download_button("💾 Download Filtered CSV", filtered_df.to_csv(index=False), "filtered_salaries.csv")
     st.download_button("💾 Download Summary CSV", summary.to_csv(index=False), "salary_summary.csv")
     
+
