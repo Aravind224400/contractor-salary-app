@@ -60,8 +60,8 @@ def generate_pdf(worker, salary, note, pay_date):
 # ----------------------------------------------------
 # Authentication
 # ----------------------------------------------------
-ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "admin123")
-VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
+ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "dada")
+VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "work")
 
 # Session state for login
 if "logged_in" not in st.session_state:
@@ -94,7 +94,7 @@ if st.session_state.logged_in:
     # Tabs based on role
     if mode == "Admin":
         tabs = st.tabs(["📅 Daily Dashboard", "➕ Add Record", "👷 Worker Management", "🔍 Search & Filter"])
-    else:  # Viewer
+    else:
         tabs = st.tabs(["📅 Daily Dashboard", "🔍 Search & Filter"])
 
     # ------------------- Tab 1: Daily Dashboard -------------------
@@ -137,7 +137,7 @@ if st.session_state.logged_in:
                 st.warning("No workers registered. Please add workers first.")
             else:
                 with st.form("add_record_form"):
-                    today = date.today().strftime("%Y-%m-%d")
+                    pay_date = st.date_input("Payment Date", value=date.today())
                     selected_worker = st.selectbox("Select Worker", workers["Worker"].tolist(), key="worker_select")
                     cat = workers.loc[workers["Worker"] == selected_worker, "Category"].values[0]
                     salary = st.number_input("Salary Amount (₹)", min_value=0)
@@ -145,13 +145,13 @@ if st.session_state.logged_in:
                     submit = st.form_submit_button("💾 Add Record")
 
                     if submit:
-                        new_row = pd.DataFrame([[today, selected_worker, cat, salary, note]],
+                        new_row = pd.DataFrame([[pay_date.strftime("%Y-%m-%d"), selected_worker, cat, salary, note]],
                                                columns=["Date", "Worker", "Category", "Salary", "Notes"])
                         data = pd.concat([data, new_row], ignore_index=True)
                         save_data(data)
                         st.success("Record added successfully!")
 
-                        pdf_file = generate_pdf(selected_worker, salary, note, today)
+                        pdf_file = generate_pdf(selected_worker, salary, note, pay_date.strftime("%Y-%m-%d"))
                         with open(pdf_file, "rb") as f:
                             st.download_button("⬇️ Download Salary Slip (PDF)", f, file_name=pdf_file)
 
