@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import date
 from supabase import create_client, Client
 import pandas as pd
-import pandas as pd # Re-import pandas for clarity
 
 # --------------------------
 # Config
@@ -12,7 +11,6 @@ st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗"
 # --------------------------
 # Secrets (Passwords & DB)
 # --------------------------
-# Make sure these 4 keys are correctly defined in your .streamlit/secrets.toml
 try:
     ADMIN_PASSWORD = st.secrets["admin_password"]
     VIEWER_PASSWORD = st.secrets["viewer_password"]
@@ -20,37 +18,44 @@ try:
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 except KeyError as e:
     st.error(f"Configuration Error: Missing secret key {e}. Please check your .streamlit/secrets.toml file or Streamlit Cloud secrets.")
-    st.stop() # Stop execution if secrets are missing
+    st.stop() 
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --------------------------
-# Helper Functions
+# Helper Functions (Caches data for performance)
 # --------------------------
 @st.cache_data(ttl=60)
 def fetch_workers():
-    """Fetches list of registered workers from the 'workers' table."""
+    """Fetches list of registered workers."""
     try:
         response = supabase.table("workers").select("name").execute()
         return [d["name"] for d in response.data]
     except Exception as e:
-        st.error(f"Error fetching workers: {e}")
+        # Check for the specific 'table not found' error during initial setup
+        if 'PGRST205' in str(e):
+            st.warning("Worker registration table 'workers' not found. Please create it in Supabase.")
+        else:
+            st.error(f"Error fetching workers: {e}")
         return []
 
 @st.cache_data(ttl=60)
 def fetch_salaries():
-    """Fetches all salary records from the 'salaries' table."""
+    """Fetches all salary records."""
     try:
         response = supabase.table("salaries").select("*").order("date", desc=True).execute()
         return pd.DataFrame(response.data)
     except Exception as e:
-        st.error(f"Error fetching salaries: {e}")
+        if 'PGRST205' in str(e):
+            st.warning("Salary record table 'salaries' not found. Please create it in Supabase.")
+        else:
+            st.error(f"Error fetching salaries: {e}")
         return pd.DataFrame()
 
 def delete_session():
     """Clears the session state for logout."""
     st.session_state.clear()
-    # No st.experimental_rerun() here, as clearing state forces a rerun.
+    st.experimental_rerun()
 
 # --------------------------
 # Login
@@ -70,13 +75,15 @@ if not st.session_state.logged_in:
         if password == ADMIN_PASSWORD:
             st.session_state.logged_in = True
             st.session_state.mode = "admin"
+            # FIX: Rerun immediately to cleanly render the tabs
+            st.experimental_rerun() 
             st.success("Admin login successful ✅")
-            st.experimental_rerun() # Reruns to hide login and show tabs
         elif password == VIEWER_PASSWORD:
             st.session_state.logged_in = True
             st.session_state.mode = "viewer"
+            # FIX: Rerun immediately to cleanly render the viewer content
+            st.experimental_rerun() 
             st.success("Viewer login successful 👀")
-            st.experimental_rerun() # Reruns to hide login and show viewer content
         else:
             st.error("Incorrect password. Try again.")
 
@@ -95,16 +102,13 @@ if st.session_state.logged_in:
         with tab1:
             st.subheader("✍️ Add Worker Salary Record")
             
-            # Fetch registered workers for suggest
             registered_workers = fetch_workers()
 
             with st.form("salary_form"):
-                # Use st.selectbox for name suggestion
                 name_select = st.selectbox("Worker Name (Select or type a new name)", 
                                     options=["--- Add New Worker ---"] + registered_workers,
                                     index=0)
                 
-                # If "--- Add New Worker ---" is selected, allow free text input
                 if name_select == "--- Add New Worker ---":
                     name = st.text_input("Enter New Worker Name").strip()
                 else:
@@ -119,7 +123,7 @@ if st.session_state.logged_in:
                 data = {"date": str(work_date), "worker_name": name, "salary": salary, "notes": note}
                 supabase.table("salaries").insert(data).execute()
                 st.success(f"✅ Record for **{name}** saved permanently!")
-                st.cache_data.clear() # Clear cache to refresh data in other tabs
+                st.cache_data.clear() 
                 st.experimental_rerun()
 
         # --- TAB 3: Worker Registration ---
@@ -127,7 +131,7 @@ if st.session_state.logged_in:
             st.subheader("👷 Register New Worker")
             registered_workers_display = fetch_workers()
             if registered_workers_display:
-                st.info(f"Currently Registered: {', '.join(registered_workers_display)}")
+                st.info(f"Currently Registered ({len(registered_workers_display)}): {', '.join(registered_workers_display)}")
 
             with st.form("worker_registration"):
                 new_worker_name = st.text_input("New Worker Name to Register").strip()
@@ -138,10 +142,9 @@ if st.session_state.logged_in:
                     st.warning(f"Worker '{new_worker_name}' is already registered.")
                 else:
                     try:
-                        # Attempt to insert, ensuring the 'workers' table exists with a 'name' column
                         supabase.table("workers").insert({"name": new_worker_name}).execute()
                         st.success(f"✅ Worker **{new_worker_name}** registered!")
-                        st.cache_data.clear() # Clear cache to refresh the select box
+                        st.cache_data.clear() 
                         st.experimental_rerun()
                     except Exception as e:
                         st.error(f"Error registering worker. Check your Supabase table schema: {e}")
@@ -150,7 +153,6 @@ if st.session_state.logged_in:
         with tab2:
             st.subheader("📋 View & Edit Records")
             
-            # Admin Edit Form
             if 'edit_id' not in st.session_state:
                 st.session_state.edit_id = None
 
@@ -161,11 +163,9 @@ if st.session_state.logged_in:
                     
                     with st.form("edit_form"):
                         edit_name = st.text_input("Worker Name", value=record["worker_name"])
-                        # Convert Supabase string date to Python date object for date_input
                         edit_date_val = pd.to_datetime(record["date"]).date()
                         edit_date = st.date_input("Date", value=edit_date_val)
                         edit_salary = st.number_input("Salary (₹)", value=record["salary"], min_value=0.0, step=100.0)
-                        # Handle potential NaN in notes
                         edit_note_val = record["notes"] if pd.notna(record["notes"]) else ""
                         edit_note = st.text_area("Note", value=edit_note_val)
                         
@@ -180,12 +180,12 @@ if st.session_state.logged_in:
                             }
                             supabase.table("salaries").update(update_data).eq("id", st.session_state.edit_id).execute()
                             st.success("✅ Record updated successfully!")
-                            st.session_state.edit_id = None # Exit edit mode
+                            st.session_state.edit_id = None 
                             st.cache_data.clear()
                             st.experimental_rerun()
 
                         if col_cancel.form_submit_button("Cancel"):
-                            st.session_state.edit_id = None # Exit edit mode
+                            st.session_state.edit_id = None 
                             st.experimental_rerun()
                     st.markdown("---") 
                 except IndexError:
@@ -197,7 +197,6 @@ if st.session_state.logged_in:
             if df.empty:
                 st.info("No records found yet.")
             else:
-                # Call shared function to handle filtering and display
                 show_records(df, mode)
     
     # --- VIEWER INTERFACE (No Tabs, just records) ---
@@ -206,7 +205,6 @@ if st.session_state.logged_in:
         if df.empty:
             st.info("No records found yet.")
         else:
-            # Call shared function to handle filtering and display
             show_records(df, mode)
 
     # --------------------------
@@ -221,7 +219,6 @@ if st.session_state.logged_in:
 def show_records(df, mode):
     """Handles filtering and displaying salary records for both Admin and Viewer."""
     
-    # Ensure date column is datetime
     df["date"] = pd.to_datetime(df["date"])
     
     # --------------------------
@@ -229,7 +226,6 @@ def show_records(df, mode):
     # --------------------------
     st.markdown("### 📅 Filter by Date Range")
     
-    # Ensure min/max dates are valid
     min_date = df["date"].min().date()
     max_date = df["date"].max().date()
     
@@ -239,9 +235,8 @@ def show_records(df, mode):
     with col2:
         end_date = st.date_input("To", value=max_date, min_value=min_date, max_value=max_date)
 
-    # Apply date filter
     mask = (df["date"].dt.date >= start_date) & (df["date"].dt.date <= end_date)
-    filtered_df = df.loc[mask].copy() # Use .copy() to avoid SettingWithCopyWarning later
+    filtered_df = df.loc[mask].copy()
 
     # --------------------------
     # Worker Name Filter
@@ -272,30 +267,26 @@ def show_records(df, mode):
     # Show filtered table
     # --------------------------
     display_df = filtered_df.copy()
-    display_df["date"] = display_df["date"].dt.date # Show date only
+    display_df["date"] = display_df["date"].dt.date
     
-    # Drop the ID column for display (Admins will see buttons, Viewers won't need it)
+    # Drop the ID column for display
     display_df = display_df.drop(columns=['id'])
 
     if mode == "admin":
-        st.markdown("##### Full Records (Admin Mode - Use 'Edit/View Details' buttons below to modify notes/data)")
+        st.markdown("##### Full Records (Admin Mode)")
         
-        # Display the dataframe
         st.dataframe(display_df, use_container_width=True)
 
-        # Create separate buttons for editing linked by ID
-        st.markdown("##### Action: Edit/Delete")
+        st.markdown("##### Action: Edit/Delete (Use buttons below)")
         
         for index, row in filtered_df.iterrows():
             col_id, col_btn_edit, col_btn_delete = st.columns([1, 2, 2])
             
             col_id.write(f"ID: **{row['id']}**")
             
-            # Edit Button: Sets the edit_id in session state to show the edit form
             col_btn_edit.button("✏️ Edit/View Details", key=f"edit_btn_{row['id']}", 
                                 on_click=lambda id=row['id']: st.session_state.update(edit_id=id))
 
-            # Delete Button: Executes deletion and reruns
             if col_btn_delete.button("🗑 Delete", key=f"delete_btn_{row['id']}"):
                 try:
                     supabase.table("salaries").delete().eq("id", row['id']).execute()
