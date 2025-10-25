@@ -25,8 +25,8 @@ if not os.path.exists(WORKER_FILE):
 # --------------------------
 # Passwords
 # --------------------------
-ADMIN_PASS = "admin123"
-VIEW_PASS = "view123"
+ADMIN_PASS = "dada"
+VIEW_PASS = "work"
 
 # --------------------------
 # Helper Functions
