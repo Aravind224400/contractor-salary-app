@@ -60,8 +60,8 @@ def generate_pdf(worker, salary, note, pay_date):
 # ----------------------------------------------------
 # Authentication
 # ----------------------------------------------------
-ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "dada")
-VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "work")
+ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "admin123")
+VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
 
 # Session state for login
 if "logged_in" not in st.session_state:
@@ -136,6 +136,7 @@ if st.session_state.logged_in:
             if workers.empty:
                 st.warning("No workers registered. Please add workers first.")
             else:
+                submit = False  # default
                 with st.form("add_record_form"):
                     pay_date = st.date_input("Payment Date", value=date.today())
                     selected_worker = st.selectbox("Select Worker", workers["Worker"].tolist(), key="worker_select")
@@ -144,16 +145,20 @@ if st.session_state.logged_in:
                     note = st.text_area("Notes (Work done, site, etc.)")
                     submit = st.form_submit_button("💾 Add Record")
 
-                    if submit:
-                        new_row = pd.DataFrame([[pay_date.strftime("%Y-%m-%d"), selected_worker, cat, salary, note]],
-                                               columns=["Date", "Worker", "Category", "Salary", "Notes"])
-                        data = pd.concat([data, new_row], ignore_index=True)
-                        save_data(data)
-                        st.success("Record added successfully!")
+                if submit:
+                    # Save record
+                    new_row = pd.DataFrame([[pay_date.strftime("%Y-%m-%d"), selected_worker, cat, salary, note]],
+                                           columns=["Date", "Worker", "Category", "Salary", "Notes"])
+                    data = pd.concat([data, new_row], ignore_index=True)
+                    save_data(data)
+                    st.success("Record added successfully!")
 
-                        pdf_file = generate_pdf(selected_worker, salary, note, pay_date.strftime("%Y-%m-%d"))
-                        with open(pdf_file, "rb") as f:
-                            st.download_button("⬇️ Download Salary Slip (PDF)", f, file_name=pdf_file)
+                    # Generate PDF
+                    pdf_file = generate_pdf(selected_worker, salary, note, pay_date.strftime("%Y-%m-%d"))
+
+                    # Download button outside the form
+                    with open(pdf_file, "rb") as f:
+                        st.download_button("⬇️ Download Salary Slip (PDF)", f, file_name=pdf_file)
 
     # ------------------- Tab 3: Worker Management (Admin) -------------------
     if mode == "Admin":
