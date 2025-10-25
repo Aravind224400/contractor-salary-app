@@ -60,8 +60,8 @@ def generate_pdf(worker, salary, note, pay_date):
 # ----------------------------------------------------
 # Authentication
 # ----------------------------------------------------
-ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "admin123")
-VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
+ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "dada")
+VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "work")
 
 # Session state for login
 if "logged_in" not in st.session_state:
