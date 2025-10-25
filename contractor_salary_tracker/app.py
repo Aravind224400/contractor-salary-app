@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import date
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -39,7 +39,8 @@ def save_workers(df):
     df.to_csv(WORKER_FILE, index=False)
 
 def generate_pdf(worker, salary, note, pay_date):
-    filename = f"SalarySlip_{worker}_{pay_date}.pdf"
+    safe_worker = worker.replace(" ", "_")
+    filename = f"SalarySlip_{safe_worker}_{pay_date}.pdf"
     c = canvas.Canvas(filename, pagesize=A4)
     c.setFont("Helvetica-Bold", 18)
     c.drawString(200, 800, "Salary Slip")
@@ -72,8 +73,13 @@ if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and passwor
     data = load_data()
     workers = load_workers()
 
-    # Tabs
-    tabs = st.tabs(["📅 Daily Dashboard", "➕ Add Record", "👷 Worker Management", "🔍 Search & Filter"])
+    # ----------------------------------------------------
+    # Tabs based on role
+    # ----------------------------------------------------
+    if mode == "Admin":
+        tabs = st.tabs(["📅 Daily Dashboard", "➕ Add Record", "👷 Worker Management", "🔍 Search & Filter"])
+    else:  # Viewer
+        tabs = st.tabs(["📅 Daily Dashboard", "🔍 Search & Filter"])
 
     # ----------------------------------------------------
     # Tab 1: Daily Dashboard
@@ -97,75 +103,86 @@ if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and passwor
 
             # Salary Trend
             st.subheader("📈 Weekly Salary Trend")
-            trend = data.groupby("Date")["Salary"].sum().reset_index()
+            trend = data.groupby("Date")["Salary"].sum().reset_index().sort_values("Date")
             fig, ax = plt.subplots()
             ax.plot(trend["Date"], trend["Salary"], marker="o")
             ax.set_xlabel("Date")
             ax.set_ylabel("Total Salary")
             ax.set_title("Salary Trend")
+            plt.xticks(rotation=45)
             st.pyplot(fig)
         else:
             st.info("No records found yet.")
 
     # ----------------------------------------------------
-    # Tab 2: Add Record
+    # Tab 2: Add Record (Admin Only)
     # ----------------------------------------------------
-    with tabs[1]:
-        st.subheader("➕ Add New Record")
+    if mode == "Admin":
+        with tabs[1]:
+            st.subheader("➕ Add New Record")
 
-        with st.form("add_record_form"):
-            today = date.today().strftime("%Y-%m-%d")
-            selected_worker = st.selectbox("Select Worker", workers["Worker"].tolist(), key="worker_select")
-            cat = workers.loc[workers["Worker"] == selected_worker, "Category"].values[0] if selected_worker else ""
-            salary = st.number_input("Salary Amount (₹)", min_value=0)
-            note = st.text_area("Notes (Work done, site, etc.)")
-            submit = st.form_submit_button("💾 Add Record")
+            if workers.empty:
+                st.warning("No workers registered. Please add workers first.")
+            else:
+                with st.form("add_record_form"):
+                    today = date.today().strftime("%Y-%m-%d")
+                    selected_worker = st.selectbox("Select Worker", workers["Worker"].tolist(), key="worker_select")
+                    cat = workers.loc[workers["Worker"] == selected_worker, "Category"].values[0]
+                    salary = st.number_input("Salary Amount (₹)", min_value=0)
+                    note = st.text_area("Notes (Work done, site, etc.)")
+                    submit = st.form_submit_button("💾 Add Record")
 
-            if submit:
-                new_row = pd.DataFrame([[today, selected_worker, cat, salary, note]],
-                                       columns=["Date", "Worker", "Category", "Salary", "Notes"])
-                data = pd.concat([data, new_row], ignore_index=True)
-                save_data(data)
-                st.success("Record added successfully!")
+                    if submit:
+                        new_row = pd.DataFrame([[today, selected_worker, cat, salary, note]],
+                                               columns=["Date", "Worker", "Category", "Salary", "Notes"])
+                        data = pd.concat([data, new_row], ignore_index=True)
+                        save_data(data)
+                        st.success("Record added successfully!")
 
-                pdf_file = generate_pdf(selected_worker, salary, note, today)
-                with open(pdf_file, "rb") as f:
-                    st.download_button("⬇️ Download Salary Slip (PDF)", f, file_name=pdf_file)
+                        pdf_file = generate_pdf(selected_worker, salary, note, today)
+                        with open(pdf_file, "rb") as f:
+                            st.download_button("⬇️ Download Salary Slip (PDF)", f, file_name=pdf_file)
 
     # ----------------------------------------------------
-    # Tab 3: Worker Management
+    # Tab 3: Worker Management (Admin Only)
     # ----------------------------------------------------
-    with tabs[2]:
-        st.subheader("👷 Worker Management")
+    if mode == "Admin":
+        with tabs[2]:
+            st.subheader("👷 Worker Management")
 
-        with st.form("worker_form"):
-            name = st.text_input("Worker Name", key="add_worker_name")
-            category = st.selectbox("Category", ["Mason", "Painter", "Helper", "Electrician", "Other"], key="add_worker_cat")
-            add_btn = st.form_submit_button("Add Worker")
+            with st.form("worker_form"):
+                name = st.text_input("Worker Name", key="add_worker_name")
+                category = st.selectbox("Category", ["Mason", "Painter", "Helper", "Electrician", "Other"], key="add_worker_cat")
+                add_btn = st.form_submit_button("Add Worker")
 
-            if add_btn and name:
-                if name not in workers["Worker"].values:
-                    new_w = pd.DataFrame([[name, category]], columns=["Worker", "Category"])
-                    workers = pd.concat([workers, new_w], ignore_index=True)
-                    save_workers(workers)
-                    st.success(f"Worker '{name}' added.")
-                else:
-                    st.warning("Worker already exists!")
+                if add_btn and name:
+                    name = name.strip().title()
+                    if name not in workers["Worker"].values:
+                        new_w = pd.DataFrame([[name, category]], columns=["Worker", "Category"])
+                        workers = pd.concat([workers, new_w], ignore_index=True)
+                        save_workers(workers)
+                        st.success(f"Worker '{name}' added.")
+                    else:
+                        st.warning("Worker already exists!")
 
-        st.write("### 👷 Registered Workers")
-        st.dataframe(workers)
+            st.write("### 👷 Registered Workers")
+            st.dataframe(workers)
 
     # ----------------------------------------------------
     # Tab 4: Search & Filter
     # ----------------------------------------------------
-    with tabs[3]:
+    with tabs[-1]:
         st.subheader("🔍 Search and Filter Records")
 
         col1, col2 = st.columns(2)
         with col1:
             worker_filter = st.selectbox("Select Worker", ["All"] + workers["Worker"].tolist(), key="filter_worker")
         with col2:
-            date_filter = st.date_input("Select Date", value=None, key="filter_date")
+            use_date_filter = st.checkbox("Filter by Date?")
+            if use_date_filter:
+                date_filter = st.date_input("Select Date", value=date.today())
+            else:
+                date_filter = None
 
         filtered_data = data.copy()
         if worker_filter != "All":
