@@ -1,110 +1,183 @@
 import streamlit as st
+import sqlite3
 import pandas as pd
 from datetime import date
-import os
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-# ----------------------------------------------------
-# Streamlit Config
-# ----------------------------------------------------
-st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗", layout="wide")
+# -------------------------------------
+# DATABASE CONNECTION
+# -------------------------------------
+conn = sqlite3.connect("data.db", check_same_thread=False)
+c = conn.cursor()
 
-# ----------------------------------------------------
-# App Setup
-# ----------------------------------------------------
-DATA_FILE = "data.csv"
-WORKER_FILE = "workers.csv"
+# Create tables if they don't exist
+c.execute('''
+CREATE TABLE IF NOT EXISTS workers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE,
+    category TEXT
+)
+''')
 
-# ----------------------------------------------------
-# Utility Functions
-# ----------------------------------------------------
-def load_data():
-    if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
-    else:
-        return pd.DataFrame(columns=["Date", "Worker", "Category", "Salary", "Notes"])
+c.execute('''
+CREATE TABLE IF NOT EXISTS records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pay_date TEXT,
+    worker TEXT,
+    category TEXT,
+    salary REAL,
+    notes TEXT
+)
+''')
 
-def save_data(df):
-    df.to_csv(DATA_FILE, index=False)
+conn.commit()
 
-def load_workers():
-    if os.path.exists(WORKER_FILE):
-        return pd.read_csv(WORKER_FILE)
-    else:
-        return pd.DataFrame(columns=["Worker", "Category"])
+# -------------------------------------
+# APP CONFIG
+# -------------------------------------
+st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="💰", layout="wide")
+st.title("🏗 Contractor Salary Tracker")
 
-def save_workers(df):
-    df.to_csv(WORKER_FILE, index=False)
+# -------------------------------------
+# LOGIN SYSTEM
+# -------------------------------------
+ADMIN_PASS = "admin123"
+VIEW_PASS = "view123"
 
-def generate_pdf(worker, salary, note, pay_date):
-    safe_worker = worker.replace(" ", "_")
-    filename = f"SalarySlip_{safe_worker}_{pay_date}.pdf"
-    c = canvas.Canvas(filename, pagesize=A4)
-    c.setFont("Helvetica-Bold", 18)
-    c.drawString(200, 800, "Salary Slip")
+if "role" not in st.session_state:
+    st.session_state.role = None
 
-    c.setFont("Helvetica", 12)
-    c.drawString(100, 750, f"Date: {pay_date}")
-    c.drawString(100, 720, f"Worker: {worker}")
-    c.drawString(100, 690, f"Salary: ₹{salary}")
-    c.drawString(100, 660, f"Notes: {note}")
+if not st.session_state.role:
+    st.subheader("🔐 Login")
 
-    c.line(100, 600, 400, 600)
-    c.drawString(100, 580, "Signature: _____________________")
-
-    c.save()
-    return filename
-
-# ----------------------------------------------------
-# Authentication
-# ----------------------------------------------------
-ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "dada")
-VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "work")
-
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.mode = None
-
-# ------------------- Login Form -------------------
-if not st.session_state.logged_in:
-    st.title("🔐 Contractor Salary Tracker Login")
-
-    with st.form("login_form"):
-        mode = st.radio("Login as", ["Admin", "Viewer"])
-        password = st.text_input("Enter Password", type="password")
-        submit = st.form_submit_button("Login")
-
-    if submit:
-        if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and password == VIEW_PASS):
-            st.session_state.logged_in = True
-            st.session_state.mode = mode
-            st.success(f"Logged in as {mode}")
+    password = st.text_input("Enter Password", type="password")
+    if st.button("Login"):
+        if password == ADMIN_PASS:
+            st.session_state.role = "admin"
+            st.success("Logged in as Admin ✅")
+            st.experimental_rerun()
+        elif password == VIEW_PASS:
+            st.session_state.role = "viewer"
+            st.success("Logged in as Viewer 👁️")
+            st.experimental_rerun()
         else:
-            st.error("❌ Incorrect password. Try again.")
+            st.error("Incorrect password ❌")
+    st.stop()
 
-# ------------------- Main App -------------------
-if st.session_state.logged_in:
-    mode = st.session_state.mode
-    data = load_data()
-    workers = load_workers()
+# -------------------------------------
+# ADMIN FUNCTIONS
+# -------------------------------------
+def add_worker(name, category):
+    try:
+        c.execute("INSERT INTO workers (name, category) VALUES (?, ?)", (name, category))
+        conn.commit()
+        st.success(f"Worker '{name}' added successfully!")
+    except sqlite3.IntegrityError:
+        st.warning("Worker already exists.")
 
-    # Tabs based on role
-    if mode == "Admin":
-        tabs = st.tabs(["📅 Daily Dashboard", "➕ Add Record", "👷 Worker Management", "✏️ Edit Records", "🔍 Search & Filter"])
-    else:  # Viewer
-        tabs = st.tabs(["📅 Daily Dashboard", "🔍 Search & Filter"])
+def get_workers():
+    c.execute("SELECT name, category FROM workers")
+    return c.fetchall()
 
-    # ------------------- Tab 1: Daily Dashboard -------------------
-    with tabs[0]:
-        st.subheader("📊 Daily Summary")
-        if not data.empty:
-            today = date.today().strftime("%Y-%m-%d")
-            today_data = data[data["Date"] == today]
+def add_record(pay_date, worker, category, salary, notes):
+    c.execute("INSERT INTO records (pay_date, worker, category, salary, notes) VALUES (?, ?, ?, ?, ?)",
+              (pay_date, worker, category, salary, notes))
+    conn.commit()
+    st.success("Record added successfully!")
 
-            total_today = today_data["Salary"].sum() if not today_data.empty else 0
-            worker_count = today_data["Worker"].nunique()
-            high = today_data["Salary"].max() if not today_data.empty else 0
-            low = today_data["Salary"].min() if not today_data.empty else 0
+def get_records():
+    return pd.read_sql_query("SELECT * FROM records", conn)
 
-            col1, col2, col3, col4
+def update_record(record_id, pay_date, worker, category, salary, notes):
+    c.execute("""
+        UPDATE records 
+        SET pay_date=?, worker=?, category=?, salary=?, notes=?
+        WHERE id=?
+    """, (pay_date, worker, category, salary, notes, record_id))
+    conn.commit()
+    st.success("Record updated successfully!")
+
+# -------------------------------------
+# APP LAYOUT
+# -------------------------------------
+st.sidebar.header("Navigation")
+menu = ["Add Worker", "Add Record", "View Records", "Edit Record", "Logout"]
+choice = st.sidebar.selectbox("Select Option", menu)
+
+# -------------------------------------
+# LOGOUT
+# -------------------------------------
+if choice == "Logout":
+    st.session_state.role = None
+    st.experimental_rerun()
+
+# -------------------------------------
+# ADD WORKER
+# -------------------------------------
+elif choice == "Add Worker" and st.session_state.role == "admin":
+    st.subheader("➕ Add New Worker")
+    name = st.text_input("Worker Name")
+    category = st.text_input("Category")
+    if st.button("Add Worker"):
+        if name and category:
+            add_worker(name, category)
+        else:
+            st.warning("Please fill all fields")
+
+# -------------------------------------
+# ADD RECORD
+# -------------------------------------
+elif choice == "Add Record" and st.session_state.role == "admin":
+    st.subheader("🧾 Add Salary Record")
+
+    workers = [w[0] for w in get_workers()]
+    if not workers:
+        st.warning("Please add a worker first in 'Add Worker' tab.")
+    else:
+        pay_date = st.date_input("Date", value=date.today())
+        worker = st.selectbox("Select Worker", workers)
+        category = st.text_input("Category")
+        salary = st.number_input("Salary", min_value=0.0)
+        notes = st.text_area("Notes (optional)")
+        if st.button("Add Record"):
+            add_record(str(pay_date), worker, category, salary, notes)
+
+# -------------------------------------
+# VIEW RECORDS
+# -------------------------------------
+elif choice == "View Records":
+    st.subheader("📊 View All Records")
+    df = get_records()
+
+    if df.empty:
+        st.info("No records found.")
+    else:
+        # Filter by date range
+        start = st.date_input("Start Date", value=date.today().replace(day=1))
+        end = st.date_input("End Date", value=date.today())
+        filtered = df[(df["pay_date"] >= str(start)) & (df["pay_date"] <= str(end))]
+
+        st.dataframe(filtered, use_container_width=True)
+
+# -------------------------------------
+# EDIT RECORD (ADMIN ONLY)
+# -------------------------------------
+elif choice == "Edit Record" and st.session_state.role == "admin":
+    st.subheader("✏️ Edit Salary Record")
+    df = get_records()
+
+    if df.empty:
+        st.info("No records to edit.")
+    else:
+        record_id = st.selectbox("Select Record ID", df["id"])
+        record = df[df["id"] == record_id].iloc[0]
+
+        new_date = st.date_input("Date", value=pd.to_datetime(record["pay_date"]).date())
+        new_worker = st.text_input("Worker", record["worker"])
+        new_category = st.text_input("Category", record["category"])
+        new_salary = st.number_input("Salary", value=record["salary"])
+        new_notes = st.text_area("Notes", record["notes"])
+
+        if st.button("Update Record"):
+            update_record(record_id, str(new_date), new_worker, new_category, new_salary, new_notes)
