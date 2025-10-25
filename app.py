@@ -13,8 +13,10 @@ st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗"
 # --------------------------
 ADMIN_PASSWORD = st.secrets["admin_password"]
 VIEWER_PASSWORD = st.secrets["viewer_password"]
-SUPABASE_URL = st.secrets["https://hjzovjivayxzklktnvdo.supabase.co"]
-SUPABASE_KEY = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhqem92aml2YXl4emtsa3RudmRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEzNjg1NzgsImV4cCI6MjA3Njk0NDU3OH0.Z5ijigP0t5AagKmCAfwC1kOCcnPdfEQCoz28QfNrcGU"]
+# app.py, line 16 (or similar)
+SUPABASE_URL = st.secrets["SUPABASE_URL"] # ✅ CORRECT KEY
+
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -127,4 +129,5 @@ if st.session_state.logged_in:
     # Logout
     # --------------------------
     st.button("🔒 Logout", on_click=lambda: st.session_state.clear())
+
 
