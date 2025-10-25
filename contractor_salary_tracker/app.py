@@ -1,171 +1,221 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
-from github import Github
-import io
+from datetime import date, datetime, timedelta
+import os
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 # --------------------------
-# Config
+# App Config
 # --------------------------
 st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗", layout="wide")
 
 # --------------------------
-# Secrets
+# File Setup
 # --------------------------
-ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
-VIEW_PASSWORD = st.secrets["VIEW_PASSWORD"]
+DATA_FILE = "data.csv"
+WORKER_FILE = "workers.csv"
 
-GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-GITHUB_REPO = st.secrets["GITHUB_REPO"]
-GITHUB_BRANCH = st.secrets["GITHUB_BRANCH"]
-
-# --------------------------
-# GitHub setup
-# --------------------------
-g = Github(GITHUB_TOKEN)
-repo = g.get_repo(GITHUB_REPO)
-
-def read_csv_from_github(filename):
-    try:
-        file_content = repo.get_contents(filename, ref=GITHUB_BRANCH)
-        return pd.read_csv(io.StringIO(file_content.decoded_content.decode()))
-    except Exception:
-        return pd.DataFrame(columns=["date", "worker_name", "salary", "notes"]) if "data" in filename else pd.DataFrame(columns=["worker_name"])
-
-def save_csv_to_github(df, filename, message):
-    csv_buffer = io.StringIO()
-    df.to_csv(csv_buffer, index=False)
-    try:
-        file_content = repo.get_contents(filename, ref=GITHUB_BRANCH)
-        repo.update_file(file_content.path, message, csv_buffer.getvalue(), file_content.sha, branch=GITHUB_BRANCH)
-    except Exception:
-        repo.create_file(filename, message, csv_buffer.getvalue(), branch=GITHUB_BRANCH)
+if not os.path.exists(DATA_FILE):
+    pd.DataFrame(columns=["date", "worker_name", "category", "salary", "notes"]).to_csv(DATA_FILE, index=False)
+if not os.path.exists(WORKER_FILE):
+    pd.DataFrame(columns=["worker_name", "category"]).to_csv(WORKER_FILE, index=False)
 
 # --------------------------
-# Utility functions
+# Passwords
+# --------------------------
+ADMIN_PASS = "admin123"
+VIEW_PASS = "view123"
+
+# --------------------------
+# Helper Functions
 # --------------------------
 def load_data():
-    return read_csv_from_github("data.csv")
+    return pd.read_csv(DATA_FILE)
 
 def save_data(df):
-    save_csv_to_github(df, "data.csv", "Update salary records")
+    df.to_csv(DATA_FILE, index=False)
 
 def load_workers():
-    df = read_csv_from_github("workers.csv")
-    return df["worker_name"].tolist() if not df.empty else []
+    return pd.read_csv(WORKER_FILE)
 
-def save_workers(workers):
-    pd.DataFrame({"worker_name": workers}).to_csv("workers.csv", index=False)
-    save_csv_to_github(pd.DataFrame({"worker_name": workers}), "workers.csv", "Update worker list")
+def save_workers(df):
+    df.to_csv(WORKER_FILE, index=False)
+
+def generate_pdf(record):
+    """Create a PDF salary slip for a record"""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.setFont("Helvetica", 14)
+    c.drawString(200, 800, "🏗 Contractor Salary Slip")
+    c.line(50, 795, 550, 795)
+
+    c.setFont("Helvetica", 12)
+    y = 760
+    for key, val in record.items():
+        c.drawString(80, y, f"{key.title()}: {val}")
+        y -= 25
+
+    c.drawString(80, y - 10, "Signature: ___________________")
+    c.save()
+    buffer.seek(0)
+    return buffer
 
 # --------------------------
-# Login system
+# Login System
 # --------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.role = None
 
 if not st.session_state.logged_in:
-    st.title("🔐 Contractor Salary Tracker Login")
+    st.title("🏗 Contractor Salary Tracker Login")
     password = st.text_input("Enter Password", type="password")
-
     if st.button("Login"):
-        if password == ADMIN_PASSWORD:
+        if password == ADMIN_PASS:
             st.session_state.logged_in = True
-            st.session_state.role = "Admin"
-            st.success("✅ Logged in as Admin!")
-        elif password == VIEW_PASSWORD:
+            st.session_state.role = "admin"
+        elif password == VIEW_PASS:
             st.session_state.logged_in = True
-            st.session_state.role = "Viewer"
-            st.success("👀 Logged in as Viewer!")
+            st.session_state.role = "viewer"
         else:
-            st.error("❌ Incorrect password")
+            st.error("Incorrect password.")
+    st.stop()
 
+role = st.session_state.role
+
+# --------------------------
+# Load data
+# --------------------------
+df = load_data()
+workers_df = load_workers()
+
+st.title("🏗 Contractor Salary Tracker")
+
+# --------------------------
+# Tabs
+# --------------------------
+if role == "admin":
+    tab1, tab2, tab3, tab4 = st.tabs(["📅 Daily Dashboard", "✍️ Add Record", "👷 Manage Workers", "📋 View/Search Records"])
 else:
-    role = st.session_state.role
-    st.sidebar.success(f"Logged in as {role}")
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
+    tab1, tab4 = st.tabs(["📅 Daily Dashboard", "📋 View/Search Records"])
 
-    df = load_data()
-    workers = load_workers()
+# --------------------------
+# Tab 1 - Dashboard
+# --------------------------
+with tab1:
+    st.subheader("📊 Daily Summary Dashboard")
 
-    st.title("🏗 Contractor Salary Tracker")
-    st.info("All data is stored securely in your GitHub repository ✅")
-
-    # Admin interface
-    if role == "Admin":
-        tab1, tab2, tab3 = st.tabs(["✍️ Add Record", "📅 View by Date", "👷 Register Worker"])
-
-        # Add record
-        with tab1:
-            selected_name = st.selectbox("Select Registered Worker", ["-- New Worker --"] + workers)
-            if selected_name == "-- New Worker --":
-                worker_name = st.text_input("Enter New Worker Name").strip()
-            else:
-                worker_name = selected_name
-
-            date_val = st.date_input("Date", value=date.today())
-            salary = st.number_input("Salary (₹)", min_value=0.0, step=100.0)
-            notes = st.text_input("Notes (optional)")
-
-            if st.button("💾 Save Record"):
-                if worker_name:
-                    new_row = pd.DataFrame([{
-                        "date": str(date_val),
-                        "worker_name": worker_name,
-                        "salary": salary,
-                        "notes": notes
-                    }])
-                    df = pd.concat([df, new_row], ignore_index=True)
-                    save_data(df)
-                    st.success(f"Record saved for {worker_name}!")
-                    st.rerun()
-                else:
-                    st.warning("Please enter or select a worker name.")
-
-        # View records
-        with tab2:
-            if df.empty:
-                st.info("No records yet.")
-            else:
-                df["date"] = pd.to_datetime(df["date"])
-                unique_dates = sorted(df["date"].dt.date.unique())
-                selected_date = st.selectbox("Select Date", unique_dates[::-1])
-                filtered = df[df["date"].dt.date == selected_date]
-                st.dataframe(filtered)
-                st.metric("Total Salary Paid", f"₹{filtered['salary'].sum():,.2f}")
-
-        # Register worker
-        with tab3:
-            new_worker = st.text_input("New Worker Name").strip()
-            if st.button("✅ Register Worker"):
-                if new_worker:
-                    if new_worker not in workers:
-                        workers.append(new_worker)
-                        save_workers(workers)
-                        st.success(f"Worker '{new_worker}' registered!")
-                    else:
-                        st.warning("Already registered.")
-                else:
-                    st.warning("Enter worker name.")
-            st.write(", ".join(workers))
-
-    # Viewer interface
+    if df.empty:
+        st.info("No records yet.")
     else:
-        if df.empty:
-            st.info("No records yet.")
-        else:
-            df["date"] = pd.to_datetime(df["date"])
-            col1, col2 = st.columns(2)
-            with col1:
-                start = st.date_input("From", value=df["date"].min().date())
-            with col2:
-                end = st.date_input("To", value=df["date"].max().date())
+        df["date"] = pd.to_datetime(df["date"])
+        today = pd.Timestamp.today().normalize()
+        today_data = df[df["date"] == today]
 
-            mask = (df["date"].dt.date >= start) & (df["date"].dt.date <= end)
-            filtered = df[mask]
-            st.dataframe(filtered)
-            st.metric("Total Salary", f"₹{filtered['salary'].sum():,.2f}")
-            st.download_button("⬇️ Download CSV", filtered.to_csv(index=False), "records.csv")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Records", len(today_data))
+        col2.metric("Total Salary Paid Today", f"₹{today_data['salary'].sum():,.2f}")
+        if not today_data.empty:
+            col3.metric("Highest Salary", f"₹{today_data['salary'].max():,.2f}")
+            col4.metric("Lowest Salary", f"₹{today_data['salary'].min():,.2f}")
+
+        st.markdown("### 📅 Salary Trend (Last 7 Days)")
+        recent_data = df[df["date"] >= today - pd.Timedelta(days=7)]
+        trend = recent_data.groupby("date")["salary"].sum().reset_index()
+        st.line_chart(trend, x="date", y="salary", use_container_width=True)
+
+# --------------------------
+# Tab 2 - Add Record
+# --------------------------
+if role == "admin":
+    with tab2:
+        st.subheader("✍️ Add Salary Record")
+        worker_list = workers_df["worker_name"].tolist()
+
+        selected_worker = st.selectbox("Select Worker", ["--- Add New Worker ---"] + worker_list)
+        if selected_worker == "--- Add New Worker ---":
+            new_worker = st.text_input("Enter New Worker Name").strip()
+            category = st.selectbox("Category", ["Mason", "Painter", "Helper", "Electrician", "Other"])
+        else:
+            new_worker = selected_worker
+            category = workers_df.loc[workers_df["worker_name"] == new_worker, "category"].values[0]
+
+        salary_date = st.date_input("Date", date.today())
+        salary = st.number_input("Salary (₹)", min_value=0.0, step=100.0)
+        notes = st.text_area("Notes (optional)")
+
+        if st.button("💾 Save Record"):
+            new_record = pd.DataFrame([{
+                "date": str(salary_date),
+                "worker_name": new_worker,
+                "category": category,
+                "salary": salary,
+                "notes": notes
+            }])
+            df = pd.concat([df, new_record], ignore_index=True)
+            save_data(df)
+
+            # Register worker if new
+            if new_worker not in worker_list:
+                workers_df = pd.concat([workers_df, pd.DataFrame([{"worker_name": new_worker, "category": category}])], ignore_index=True)
+                save_workers(workers_df)
+
+            st.success(f"✅ Record added for {new_worker} on {salary_date}")
+
+# --------------------------
+# Tab 3 - Manage Workers
+# --------------------------
+if role == "admin":
+    with tab3:
+        st.subheader("👷 Worker Management")
+        st.dataframe(workers_df, use_container_width=True)
+
+        st.markdown("### ➕ Register New Worker")
+        name = st.text_input("Worker Name").strip()
+        cat = st.selectbox("Category", ["Mason", "Painter", "Helper", "Electrician", "Other"])
+        if st.button("Register Worker"):
+            if name in workers_df["worker_name"].values:
+                st.warning("Worker already exists.")
+            else:
+                workers_df.loc[len(workers_df)] = [name, cat]
+                save_workers(workers_df)
+                st.success(f"✅ {name} registered as {cat}")
+
+# --------------------------
+# Tab 4 - View/Search Records
+# --------------------------
+with tab4:
+    st.subheader("📋 Search and Filter Records")
+
+    if df.empty:
+        st.info("No records available.")
+    else:
+        df["date"] = pd.to_datetime(df["date"])
+        start_date = st.date_input("Start Date", df["date"].min().date())
+        end_date = st.date_input("End Date", df["date"].max().date())
+
+        filtered = df[(df["date"].dt.date >= start_date) & (df["date"].dt.date <= end_date)]
+
+        worker_filter = st.selectbox("Filter by Worker", ["All"] + sorted(df["worker_name"].unique().tolist()))
+        if worker_filter != "All":
+            filtered = filtered[filtered["worker_name"] == worker_filter]
+
+        search_text = st.text_input("Search Notes or Site")
+        if search_text:
+            filtered = filtered[filtered["notes"].str.contains(search_text, case=False, na=False)]
+
+        st.dataframe(filtered, use_container_width=True)
+
+        for i, row in filtered.iterrows():
+            col1, col2 = st.columns([3, 1])
+            col1.write(f"🧱 **{row['worker_name']}** — ₹{row['salary']} — {row['date'].date()}")
+            pdf = generate_pdf(row)
+            col2.download_button("📄 Download Slip", pdf, file_name=f"SalarySlip_{row['worker_name']}.pdf")
+
+# --------------------------
+# Logout
+# --------------------------
+st.markdown("---")
+st.button("🔒 Logout", on_click=lambda: st.session_state.clear())
