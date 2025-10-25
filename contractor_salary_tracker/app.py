@@ -63,11 +63,12 @@ def generate_pdf(worker, salary, note, pay_date):
 ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "admin123")
 VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
 
-# Session state to track login
+# Session state for login
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.mode = None
 
+# ------------------- Login Form -------------------
 if not st.session_state.logged_in:
     st.title("🔐 Contractor Salary Tracker Login")
 
@@ -76,20 +77,16 @@ if not st.session_state.logged_in:
         password = st.text_input("Enter Password", type="password")
         submit = st.form_submit_button("Login")
 
-        if submit:
-            if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and password == VIEW_PASS):
-                st.session_state.logged_in = True
-                st.session_state.mode = mode
-                st.success(f"Logged in as {mode}")
-                st.experimental_rerun()  # refresh page to show the app
-            else:
-                st.error("❌ Incorrect password. Try again.")
+    if submit:
+        if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and password == VIEW_PASS):
+            st.session_state.logged_in = True
+            st.session_state.mode = mode
+            st.success(f"Logged in as {mode}")
+        else:
+            st.error("❌ Incorrect password. Try again.")
 
-# ----------------------------------------------------
-# Main App (after login)
-# ----------------------------------------------------
+# ------------------- Main App -------------------
 if st.session_state.logged_in:
-
     mode = st.session_state.mode
     data = load_data()
     workers = load_workers()
@@ -97,10 +94,10 @@ if st.session_state.logged_in:
     # Tabs based on role
     if mode == "Admin":
         tabs = st.tabs(["📅 Daily Dashboard", "➕ Add Record", "👷 Worker Management", "🔍 Search & Filter"])
-    else:
+    else:  # Viewer
         tabs = st.tabs(["📅 Daily Dashboard", "🔍 Search & Filter"])
 
-    # ------------------- Tab 1: Dashboard -------------------
+    # ------------------- Tab 1: Daily Dashboard -------------------
     with tabs[0]:
         st.subheader("📊 Daily Summary")
         if not data.empty:
