@@ -63,27 +63,44 @@ def generate_pdf(worker, salary, note, pay_date):
 ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "admin123")
 VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
 
-mode = st.sidebar.radio("Login as", ["Admin", "Viewer"])
-password = st.sidebar.text_input("Enter Password", type="password")
+# Session state to track login
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.mode = None
 
-if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and password == VIEW_PASS):
-    st.success(f"Logged in as {mode}")
+if not st.session_state.logged_in:
+    st.title("🔐 Contractor Salary Tracker Login")
 
-    # Load data
+    with st.form("login_form"):
+        mode = st.radio("Login as", ["Admin", "Viewer"])
+        password = st.text_input("Enter Password", type="password")
+        submit = st.form_submit_button("Login")
+
+        if submit:
+            if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and password == VIEW_PASS):
+                st.session_state.logged_in = True
+                st.session_state.mode = mode
+                st.success(f"Logged in as {mode}")
+                st.experimental_rerun()  # refresh page to show the app
+            else:
+                st.error("❌ Incorrect password. Try again.")
+
+# ----------------------------------------------------
+# Main App (after login)
+# ----------------------------------------------------
+if st.session_state.logged_in:
+
+    mode = st.session_state.mode
     data = load_data()
     workers = load_workers()
 
-    # ----------------------------------------------------
     # Tabs based on role
-    # ----------------------------------------------------
     if mode == "Admin":
         tabs = st.tabs(["📅 Daily Dashboard", "➕ Add Record", "👷 Worker Management", "🔍 Search & Filter"])
-    else:  # Viewer
+    else:
         tabs = st.tabs(["📅 Daily Dashboard", "🔍 Search & Filter"])
 
-    # ----------------------------------------------------
-    # Tab 1: Daily Dashboard
-    # ----------------------------------------------------
+    # ------------------- Tab 1: Dashboard -------------------
     with tabs[0]:
         st.subheader("📊 Daily Summary")
         if not data.empty:
@@ -114,9 +131,7 @@ if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and passwor
         else:
             st.info("No records found yet.")
 
-    # ----------------------------------------------------
-    # Tab 2: Add Record (Admin Only)
-    # ----------------------------------------------------
+    # ------------------- Tab 2: Add Record (Admin) -------------------
     if mode == "Admin":
         with tabs[1]:
             st.subheader("➕ Add New Record")
@@ -143,9 +158,7 @@ if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and passwor
                         with open(pdf_file, "rb") as f:
                             st.download_button("⬇️ Download Salary Slip (PDF)", f, file_name=pdf_file)
 
-    # ----------------------------------------------------
-    # Tab 3: Worker Management (Admin Only)
-    # ----------------------------------------------------
+    # ------------------- Tab 3: Worker Management (Admin) -------------------
     if mode == "Admin":
         with tabs[2]:
             st.subheader("👷 Worker Management")
@@ -168,9 +181,7 @@ if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and passwor
             st.write("### 👷 Registered Workers")
             st.dataframe(workers)
 
-    # ----------------------------------------------------
-    # Tab 4: Search & Filter
-    # ----------------------------------------------------
+    # ------------------- Tab 4: Search & Filter -------------------
     with tabs[-1]:
         st.subheader("🔍 Search and Filter Records")
 
@@ -192,6 +203,3 @@ if (mode == "Admin" and password == ADMIN_PASS) or (mode == "Viewer" and passwor
 
         st.dataframe(filtered_data)
         st.write(f"Showing {len(filtered_data)} record(s).")
-
-else:
-    st.warning("Please enter the correct password to continue.")
