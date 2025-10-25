@@ -36,6 +36,13 @@ conn = get_connection()
 # ----------------------------------------------------
 # Utility Functions
 # ----------------------------------------------------
+def safe_rerun():
+    """Safe rerun for all Streamlit versions."""
+    try:
+        st.rerun()
+    except Exception:
+        pass  # ignore rerun in restricted environments
+
 def generate_pdf(worker, salary, note, pay_date):
     filename = f"SalarySlip_{worker}_{pay_date}.pdf"
     c = canvas.Canvas(filename, pagesize=A4)
@@ -54,12 +61,10 @@ def generate_pdf(worker, salary, note, pay_date):
     return filename
 
 def load_workers():
-    df = pd.read_sql("SELECT * FROM workers", conn)
-    return df
+    return pd.read_sql("SELECT * FROM workers", conn)
 
 def load_records():
-    df = pd.read_sql("SELECT * FROM records", conn)
-    return df
+    return pd.read_sql("SELECT * FROM records", conn)
 
 # ----------------------------------------------------
 # Authentication
@@ -69,7 +74,6 @@ VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
 
 if "mode" not in st.session_state:
     st.session_state["mode"] = None
-
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
@@ -85,10 +89,7 @@ if not st.session_state["logged_in"]:
             st.session_state["logged_in"] = True
             st.session_state["mode"] = mode
             st.success(f"✅ Logged in as {mode}")
-            try:
-                st.rerun()
-            except:
-                st.experimental_rerun()
+            safe_rerun()
         else:
             st.error("❌ Incorrect password.")
     st.stop()
@@ -100,10 +101,7 @@ mode = st.session_state["mode"]
 st.sidebar.success(f"Logged in as {mode}")
 if st.sidebar.button("🚪 Logout"):
     st.session_state["logged_in"] = False
-    try:
-        st.rerun()
-    except:
-        st.experimental_rerun()
+    safe_rerun()
 
 tabs = st.tabs(["📅 View Records", "➕ Add Record", "👷 Manage Workers"])
 
@@ -145,10 +143,7 @@ with tabs[0]:
                     conn.execute("UPDATE records SET salary=?, notes=? WHERE id=?", (new_salary, new_notes, selected_id))
                     conn.commit()
                     st.success("Record updated successfully!")
-                    try:
-                        st.rerun()
-                    except:
-                        st.experimental_rerun()
+                    safe_rerun()
 
 # ----------------------------------------------------
 # Tab 2: Add Record
