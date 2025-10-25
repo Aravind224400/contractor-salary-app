@@ -8,6 +8,7 @@ import os
 # --------------------------
 st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗", layout="wide")
 DATA_FILE = "data.csv"
+WORKERS_FILE = "workers.csv"
 
 # --------------------------
 # Secrets (Passwords)
@@ -16,31 +17,48 @@ ADMIN_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 VIEW_PASSWORD = st.secrets["VIEW_PASSWORD"]
 
 # --------------------------
-# Load or Create Data File
+# Load or Create Files
 # --------------------------
 if not os.path.exists(DATA_FILE):
-    df = pd.DataFrame(columns=["date", "worker_name", "salary", "notes"])
-    df.to_csv(DATA_FILE, index=False)
-else:
-    df = pd.read_csv(DATA_FILE)
+    pd.DataFrame(columns=["date", "worker_name", "salary", "notes"]).to_csv(DATA_FILE, index=False)
+
+if not os.path.exists(WORKERS_FILE):
+    pd.DataFrame(columns=["worker_name"]).to_csv(WORKERS_FILE, index=False)
 
 # --------------------------
-# Functions
+# Utility Functions
 # --------------------------
+def load_data():
+    return pd.read_csv(DATA_FILE)
+
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
 
+def load_workers():
+    return pd.read_csv(WORKERS_FILE)["worker_name"].tolist()
+
+def save_workers(workers):
+    pd.DataFrame({"worker_name": workers}).to_csv(WORKERS_FILE, index=False)
+
 def add_record(date_val, worker_name, salary, notes):
-    global df
+    df = load_data()
     new_row = {"date": date_val, "worker_name": worker_name, "salary": salary, "notes": notes}
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     save_data(df)
 
 def delete_record(index):
-    global df
+    df = load_data()
     df = df.drop(index)
     df.reset_index(drop=True, inplace=True)
     save_data(df)
+
+def register_worker(name):
+    workers = load_workers()
+    if name not in workers:
+        workers.append(name)
+        save_workers(workers)
+        return True
+    return False
 
 # --------------------------
 # Login System
@@ -72,36 +90,78 @@ else:
         st.session_state.logged_in = False
         st.rerun()
 
-    st.title("🏗 Contractor Salary Tracker (CSV Version)")
-    st.info(f"Data file path: {os.path.abspath(DATA_FILE)}")
+    st.title("🏗 Contractor Salary Tracker")
+    st.info(f"Data file: {os.path.abspath(DATA_FILE)}")
 
-    # --------------- Admin Features ---------------
+    # Load data and workers
+    df = load_data()
+    workers = load_workers()
+
+    # --------------------------
+    # Admin Features
+    # --------------------------
     if role == "Admin":
-        with st.form("add_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                date_val = st.date_input("Date", value=date.today())
-                worker_name = st.text_input("Worker Name")
-            with col2:
-                salary = st.number_input("Salary (₹)", min_value=0.0, step=100.0)
-                notes = st.text_input("Notes")
+        tab1, tab2, tab3 = st.tabs(["✍️ Add Record", "📋 View/Delete Records", "👷 Register Worker"])
 
-            submitted = st.form_submit_button("➕ Add Record")
-            if submitted:
-                add_record(date_val, worker_name, salary, notes)
-                st.success("Record added successfully!")
+        # --- Tab 1: Add Record ---
+        with tab1:
+            st.subheader("✍️ Add Worker Salary Record")
 
-        st.subheader("📋 Salary Records")
-        st.dataframe(df)
+            selected_name = st.selectbox("Select Registered Worker", ["-- New Worker --"] + workers)
+            if selected_name == "-- New Worker --":
+                worker_name = st.text_input("Enter New Worker Name").strip()
+            else:
+                worker_name = selected_name
 
-        if not df.empty:
-            del_index = st.number_input("Enter row number to delete (starting from 0)", min_value=0, max_value=len(df)-1)
-            if st.button("🗑️ Delete Selected Record"):
-                delete_record(del_index)
-                st.success("Record deleted successfully!")
+            date_val = st.date_input("Date", value=date.today())
+            salary = st.number_input("Salary (₹)", min_value=0.0, step=100.0)
+            notes = st.text_input("Notes (optional)")
 
-    # --------------- Viewer Features ---------------
+            if st.button("💾 Save Record"):
+                if worker_name:
+                    add_record(date_val, worker_name, salary, notes)
+                    st.success(f"Record saved for {worker_name}!")
+                else:
+                    st.warning("Please enter or select a worker name.")
+
+        # --- Tab 2: View/Delete Records ---
+        with tab2:
+            st.subheader("📋 All Salary Records")
+            if df.empty:
+                st.info("No records found yet.")
+            else:
+                st.dataframe(df)
+                del_index = st.number_input("Enter row number to delete (starting from 0)", 
+                                            min_value=0, max_value=len(df)-1)
+                if st.button("🗑️ Delete Record"):
+                    delete_record(del_index)
+                    st.success("Record deleted successfully!")
+                    st.rerun()
+
+        # --- Tab 3: Register Worker ---
+        with tab3:
+            st.subheader("👷 Register New Worker")
+            new_worker = st.text_input("New Worker Name").strip()
+            if st.button("✅ Register Worker"):
+                if new_worker:
+                    if register_worker(new_worker):
+                        st.success(f"Worker '{new_worker}' registered successfully!")
+                    else:
+                        st.warning(f"'{new_worker}' is already registered.")
+                else:
+                    st.warning("Please enter a worker name.")
+
+            if workers:
+                st.markdown("### Registered Workers:")
+                st.write(", ".join(workers))
+
+    # --------------------------
+    # Viewer Features
+    # --------------------------
     elif role == "Viewer":
-        st.subheader("📋 Salary Records (Read-Only)")
-        st.dataframe(df)
-        st.download_button("⬇️ Download CSV", df.to_csv(index=False), file_name="salary_data.csv")
+        st.subheader("📋 View Salary Records")
+        if df.empty:
+            st.info("No records found yet.")
+        else:
+            st.dataframe(df)
+            st.download_button("⬇️ Download CSV", df.to_csv(index=False), "salary_data.csv")
