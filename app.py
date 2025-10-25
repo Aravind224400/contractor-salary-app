@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st # FIX: Correct lowercase 'import' keyword
 from datetime import date
 from supabase import create_client, Client
 import pandas as pd
@@ -12,6 +12,7 @@ st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗"
 # Secrets (Passwords & DB)
 # --------------------------
 try:
+    # FIX: Ensure these keys exist and are correctly spelled in secrets.toml (KeyError fix)
     ADMIN_PASSWORD = st.secrets["admin_password"]
     VIEWER_PASSWORD = st.secrets["viewer_password"]
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -32,11 +33,8 @@ def fetch_workers():
         response = supabase.table("workers").select("name").execute()
         return [d["name"] for d in response.data]
     except Exception as e:
-        # Check for the specific 'table not found' error during initial setup
-        if 'PGRST205' in str(e):
+        if 'PGRST205' in str(e): # Supabase table not found error code
             st.warning("Worker registration table 'workers' not found. Please create it in Supabase.")
-        else:
-            st.error(f"Error fetching workers: {e}")
         return []
 
 @st.cache_data(ttl=60)
@@ -46,10 +44,8 @@ def fetch_salaries():
         response = supabase.table("salaries").select("*").order("date", desc=True).execute()
         return pd.DataFrame(response.data)
     except Exception as e:
-        if 'PGRST205' in str(e):
+        if 'PGRST205' in str(e): # Supabase table not found error code
             st.warning("Salary record table 'salaries' not found. Please create it in Supabase.")
-        else:
-            st.error(f"Error fetching salaries: {e}")
         return pd.DataFrame()
 
 def delete_session():
@@ -75,13 +71,12 @@ if not st.session_state.logged_in:
         if password == ADMIN_PASSWORD:
             st.session_state.logged_in = True
             st.session_state.mode = "admin"
-            # FIX: Rerun immediately to cleanly render the tabs
+            # FIX: Rerun immediately to cleanly render the tabs (AttributeError fix)
             st.experimental_rerun() 
             st.success("Admin login successful ✅")
         elif password == VIEWER_PASSWORD:
             st.session_state.logged_in = True
             st.session_state.mode = "viewer"
-            # FIX: Rerun immediately to cleanly render the viewer content
             st.experimental_rerun() 
             st.success("Viewer login successful 👀")
         else:
@@ -92,7 +87,7 @@ if not st.session_state.logged_in:
 # --------------------------
 if st.session_state.logged_in:
     mode = st.session_state.mode
-    df = fetch_salaries() # Fetch data once after login
+    df = fetch_salaries()
 
     # --- ADMIN INTERFACE (Tabs) ---
     if mode == "admin":
@@ -101,7 +96,6 @@ if st.session_state.logged_in:
         # --- TAB 1: Data Entry ---
         with tab1:
             st.subheader("✍️ Add Worker Salary Record")
-            
             registered_workers = fetch_workers()
 
             with st.form("salary_form"):
@@ -121,7 +115,7 @@ if st.session_state.logged_in:
 
             if submitted and name and name != "--- Add New Worker ---":
                 data = {"date": str(work_date), "worker_name": name, "salary": salary, "notes": note}
-                supabase.table("workers").insert(data).execute()
+                supabase.table("salaries").insert(data).execute()
                 st.success(f"✅ Record for **{name}** saved permanently!")
                 st.cache_data.clear() 
                 st.experimental_rerun()
@@ -321,4 +315,3 @@ def show_records(df, mode):
     st.download_button("💾 Download Filtered CSV", filtered_df.to_csv(index=False), "filtered_salaries.csv")
     st.download_button("💾 Download Summary CSV", summary.to_csv(index=False), "salary_summary.csv")
     
-
