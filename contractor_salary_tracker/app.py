@@ -13,7 +13,7 @@ st.set_page_config(page_title="🏗 Contractor Salary Tracker", page_icon="🏗"
 
 # ----------------------------------------------------
 # App Setup
-# ----------------------------------------------------
+# ---------------------------------------------------
 DATA_FILE = "data.csv"
 WORKER_FILE = "workers.csv"
 
