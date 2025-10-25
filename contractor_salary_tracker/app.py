@@ -38,8 +38,8 @@ conn.commit()
 # -----------------------------
 # Authentication
 # -----------------------------
-ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "admin123")
-VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "view123")
+ADMIN_PASS = st.secrets.get("ADMIN_PASSWORD", "dada")
+VIEW_PASS = st.secrets.get("VIEW_PASSWORD", "work")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
